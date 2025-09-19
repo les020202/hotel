@@ -12,8 +12,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': { target: 'http://localhost:8888', changeOrigin: true },
-      '/oauth2':{ target: 'http://localhost:8888', changeOrigin: true },
-      '/files':{ target: 'http://localhost:8888', changeOrigin: true }
+      '/oauth2': { target: 'http://localhost:8888', changeOrigin: true },
+      '/files': { target: 'http://localhost:8888', changeOrigin: true }
     }
   }
 })

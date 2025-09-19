@@ -28,3 +28,6 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+.env
+backend/src/main/resources/application.properties
+backend/src/test/resources/application.properties
