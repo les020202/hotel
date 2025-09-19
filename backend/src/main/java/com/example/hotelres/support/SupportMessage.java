@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
+
 @Entity @Table(name = "support_messages") // JPA 엔티티: support_messages 테이블과 매핑
 @Getter @Setter @NoArgsConstructor          // Lombok: getter/setter, 기본 생성자 생성
 public class SupportMessage {
@@ -29,3 +30,4 @@ public class SupportMessage {
         if (createdAt == null) createdAt = LocalDateTime.now(); // 영속화 직전 createdAt이 비어있으면 현재 시간으로 설정
     }
 }
+

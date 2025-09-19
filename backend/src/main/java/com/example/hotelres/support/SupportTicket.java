@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+
 @Entity @Table(name = "support_tickets") // JPA 엔티티이며 support_tickets 테이블과 매핑
 @Getter @Setter @NoArgsConstructor        // Lombok: getter/setter, 기본 생성자 자동 생성
 public class SupportTicket {

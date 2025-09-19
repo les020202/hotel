@@ -1,4 +1,5 @@
 // src/api/wishlistApi.js
+
 import api from '@/api/auth' 
 // ✅ 공용 Axios 인스턴스 사용
 // - Authorization 헤더(JWT) 자동 첨부

@@ -11,10 +11,10 @@ import HotelDetailView from '@/views/HotelDetailView.vue'
 // 마이페이지 관련
 import MyPage from '@/views/mypage/MyPage.vue'
 import Account from '@/views/mypage/Account.vue'
+
 import Coupons from '@/views/mypage/Coupons.vue'
 import History from '@/views/mypage/History.vue'
 import Support from '@/views/mypage/Support.vue'
-
 
 // 고객지원 하위 라우트
 import NoticeList from '@/views/support/NoticeList.vue'
@@ -26,10 +26,9 @@ import SupportInquiry from '@/views/support/SupportInquiry.vue'
 import MyTickets from '@/views/support/MyTickets.vue'
 import MyTicketDetail from '@/views/support/MyTicketDetail.vue'
 
+
 //찜 관련
 import Wishlist from '@/views/Wishlist.vue'
-
-
 
 const router = createRouter({
   // ✅ history 옵션 반드시 필요
@@ -73,7 +72,6 @@ const router = createRouter({
         { path: 'support', component: Support }    // 고객지원 진입
       ]
     },
-
     // ✅ 고객지원 페이지 (로그인 없이도 접근 가능)
     { path: '/support/notice', component: NoticeList },      
     { path: '/support/notice/:id', component: NoticeDetail },
@@ -82,6 +80,7 @@ const router = createRouter({
     { path: '/support/contact', component: ContactCenter },  
     { path: '/support/contact/inquiry', component: SupportInquiry },
     { path: '/support/contact/my', component: MyTickets },                       // 내 문의함 목록
+
     { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true }, // 상세/스레드
 
     //찜페이지

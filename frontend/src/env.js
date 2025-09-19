@@ -1,0 +1,1 @@
+export const KAKAO_KEY = import.meta.env.VITE_KAKAO_APP_KEY;

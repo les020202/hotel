@@ -111,6 +111,7 @@ export const verifyEmailCode = (email, code) =>
 export const updateMyEmail = ({ email, verificationCode }) =>
   api.patch('/users/me/email', { email, verificationCode }).then(r => r.data)
 
+
 // 새 비밀번호 재설정
 export const resetPassword = (email, code, newPassword) =>
   api.post('/auth/reset-password', { email, code, newPassword }).then(r => r.data)

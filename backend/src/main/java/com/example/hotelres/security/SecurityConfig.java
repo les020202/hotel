@@ -78,7 +78,10 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/favicon.ico", "/assets/**",
                                 "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
                         .requestMatchers("/error", "/error/**").permitAll()
-                        .requestMatchers("/files/**").permitAll() 
+                        .requestMatchers("/files/**").permitAll()
+                        .requestMatchers("/api/amenities/**").permitAll()   // ← 추가
+                        .requestMatchers("/api/search/**").permitAll()
+
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )

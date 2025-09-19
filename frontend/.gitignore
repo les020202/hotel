@@ -28,5 +28,13 @@ coverage
 *.sw?
 
 *.tsbuildinfo
-.env
 
+# Spring Boot 설정파일 제외
+/backend/src/main/resources/application.properties
+
+
+
+# 민감 설정 파일 제외
+.env
+backend/src/main/resources/application.properties
+backend/src/test/resources/application.properties

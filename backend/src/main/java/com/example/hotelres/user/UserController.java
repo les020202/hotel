@@ -8,6 +8,7 @@ import com.example.hotelres.auth.EmailService;
 import com.example.hotelres.user.dto.UpdateEmailRequest;
 
 import jakarta.validation.Valid;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -114,6 +115,7 @@ public class UserController {
         // 성공 응답
         return ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."));
     }
+
     
     /**
      * 내 이메일 변경 (이메일 인증코드 필요)

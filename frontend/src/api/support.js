@@ -87,3 +87,4 @@ export function openTicket({ subject, firstMessage }) {
   // POST /support/tickets  { subject, firstMessage }
   return api.post('/support/tickets', { subject, firstMessage })
 }
+

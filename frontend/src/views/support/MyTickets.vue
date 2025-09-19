@@ -2,7 +2,6 @@
   <div class="page">
     <!-- 뒤로가기 버튼 (SupportInquiry.vue와 동일 스타일) -->
     <button class="back-btn" @click="goBack">← 뒤로가기</button>
-
     <div class="toolbar">
       <div class="tabs">
         <button :class="{on: q.status==='ALL'}" @click="setStatus('ALL')">전체</button>
@@ -98,7 +97,6 @@ onMounted(load)
 .back-btn:hover {
   text-decoration: underline;
 }
-
 .toolbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap }
 .tabs{ display:flex; gap:8px }
 .tabs button{ padding:8px 12px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer }

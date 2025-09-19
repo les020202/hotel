@@ -37,14 +37,16 @@ public class HotelDetailsRepository {
 
     /* ---------- SQLs ---------- */
 
-    // 호텔 기본
+
+    // 호텔 기본(전화/위도/경도 포함)
     private static final String HOTEL_SQL = """
-        SELECT h.id, h.name, h.region, h.address, h.rating, h.grade_level, h.cover_image_url
+        SELECT h.id, h.name, h.region, h.address, h.rating, h.grade_level, h.cover_image_url,
+               h.phone, h.latitude, h.longitude
         FROM hotels h
         WHERE h.id = :id
     """;
 
-    // 룸타입 오퍼(템플릿 이미지 포함) — ✅ 인원 조건(capacity) 추가
+    // 룸타입 오퍼(템플릿 이미지 포함) — 인원 조건(capacity) 적용
     private static final String ROOMTYPE_SQL = """
         SELECT
             rt.id                   AS room_type_id,
@@ -64,7 +66,7 @@ public class HotelDetailsRepository {
           AND bd.stay_date >= :ci
           AND bd.stay_date <  :co
           AND bd.is_sellable = 1
-          AND rt.capacity >= :guests        -- ✅ 여기 추가
+          AND rt.capacity >= :guests
         GROUP BY rt.id, rt.name, rt.capacity, rt.area_sqm, tpl.image_url
         HAVING COUNT(*) = DATEDIFF(:co, :ci)
            AND MIN(bd.remaining_qty) > 0
@@ -78,8 +80,18 @@ public class HotelDetailsRepository {
         ORDER BY sort_order ASC, id ASC
     """;
 
+
+    // ✅ 호텔별 어메니티 (amenity_id는 amenities.id와 조인)
+    private static final String AMENITIES_SQL = """
+        SELECT a.code, a.name
+        FROM hotel_amenities ha
+        JOIN amenities a ON a.id = ha.amenity_id
+        WHERE ha.hotel_id = :hid
+          AND IFNULL(ha.bool_value, 1) = 1
+        ORDER BY (a.sort_order IS NULL), a.sort_order, a.name
+    """;
+
     /* ---------- main ---------- */
-    // ✅ guests 파라미터 추가
     public HotelDetailsDto findDetails(Long hotelId, LocalDate ci, LocalDate co, int guests) {
         // 1) 호텔 기본
         List<?> hotelRows = em.createNativeQuery(HOTEL_SQL)
@@ -97,8 +109,13 @@ public class HotelDetailsRepository {
         h.setRating(nDouble(hrow[4]));
         h.setGradeLevel(nInt(hrow[5]));
         String cover = (String) hrow[6]; // 커버는 갤러리로
+        // 신규 필드
+        h.setPhone((String) hrow[7]);
+        h.setLatitude(nDouble(hrow[8]));
+        h.setLongitude(nDouble(hrow[9]));
 
-        // 2) 룸타입 오퍼 (✅ guests 바인딩)
+        // 2) 룸타입 오퍼
+
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery(ROOMTYPE_SQL)
                 .setParameter("hid", hotelId)
@@ -137,13 +154,27 @@ public class HotelDetailsRepository {
         HotelDetailsDto.Gallery g = new HotelDetailsDto.Gallery();
         g.setCover(cover);
         g.setRoomDefaults(defaultImages);
+        // 4) 어메니티
+        @SuppressWarnings("unchecked")
+        List<Object[]> amenRows = em.createNativeQuery(AMENITIES_SQL)
+                .setParameter("hid", hotelId)
+                .getResultList();
 
-        // 4) 조립
+        List<HotelDetailsDto.Amenity> amens = new ArrayList<>(amenRows.size());
+        for (Object[] r : amenRows) {
+            HotelDetailsDto.Amenity a = new HotelDetailsDto.Amenity();
+            a.setCode((String) r[0]);
+            a.setName((String) r[1]);
+            amens.add(a);
+        }
+
+        // 5) 조립
+
         HotelDetailsDto dto = new HotelDetailsDto();
         dto.setHotel(h);
         dto.setGallery(g);
         dto.setRoomTypes(types);
-        dto.setAmenities(List.of());
+        dto.setAmenities(amens);   // ← 필수! (빈 리스트로 덮어쓰지 말 것)
         return dto;
     }
 }

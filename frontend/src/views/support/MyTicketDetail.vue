@@ -8,17 +8,11 @@
       </div>
       <div class="meta">{{ fmt(ticket?.createdAt) }}</div>
     </div>
-
     <!-- 라벨 의미 안내 -->
     <div class="legend">
       <span class="pill mine">내 문의</span>는 <strong>운영자에게 전송된 내 메시지</strong>이며,
       <span class="pill admin">운영자 답변</span>은 <strong>운영자가 보낸 회신</strong>입니다.
     </div>
-
-    <div v-if="loading" class="loading">불러오는 중…</div>
-
-    <div v-else>
-      <div class="thread">
         <div
           class="msg"
           v-for="m in messages"
@@ -43,8 +37,6 @@
           <button class="send" :disabled="!reply" @click="sendReply">보내기</button>
         </div>
       </div>
-    </div>
-  </div>
 </template>
 
 <script setup>
@@ -55,6 +47,7 @@
   - ADMIN(대소문자 무관, 'ROLE_ADMIN' 포함) 문자열이 하나라도 있으면 운영자 답변으로 처리
   - 그 외는 '내 문의'로 처리
 */
+
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getTicket, getTicketMessages, postTicketMessage } from '@/api/support'
@@ -152,7 +145,6 @@ onMounted(load)
 }
 .pill.mine{ background:#059669 }   /* 내 문의(녹색) */
 .pill.admin{ background:#3b82f6 }  /* 운영자 답변(파랑) */
-
 .thread{ margin-top:12px; display:grid; gap:10px }
 .msg{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff }
 .msg.mine{ border-color:#c7f0e4; background:#f1fffa }
@@ -169,7 +161,6 @@ onMounted(load)
 .role-pill.mine{ background:#059669 }
 .role-pill.admin{ background:#3b82f6 }
 .sub{ color:#6b7280; font-weight:500; font-size:12px }
-
 .msg .when{ color:#6b7280; font-size:12px; margin-top:6px }
 
 .composer{ margin-top:12px; display:grid; gap:8px }
