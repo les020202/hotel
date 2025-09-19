@@ -1,0 +1,27 @@
+# Spring Boot 설정파일 제외
+/backend/src/main/resources/application.properties
+
+
+
+target/
+*.class
+*.jar
+*.war
+*.iml
+.idea/
+*.ipr
+*.iws
+*.bak
+*.log
+.vscode/
+.DS_Store
+Thumbs.db
+node_modules/
+dist/
+application-*.yml
+application-*.properties
+.env
+# 민감 설정 파일 제외
+.env
+backend/src/main/resources/application.properties
+backend/src/test/resources/application.properties
