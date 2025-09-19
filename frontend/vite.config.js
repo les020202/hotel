@@ -1,18 +1,23 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'node:path'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)), // ✅ ESM-safe
+    },
+  },
   server: {
+    host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/api':   { target: 'http://localhost:8888', changeOrigin: true },
-      '/oauth2':{ target: 'http://localhost:8888', changeOrigin: true },
-      // ✅ 추가: /confirm도 백엔드(8888)로 프록시
-      '/confirm': { target: 'http://localhost:8888', changeOrigin: true }
-    }
-  }
+      '/api':     { target: 'http://172.16.15.59:8888', changeOrigin: true },
+      '/oauth2':  { target: 'http://172.16.15.59:8888', changeOrigin: true },
+      '/confirm': { target: 'http://172.16.15.59:8888', changeOrigin: true },
+      // (선택) 로그아웃도 서버로 보낼 거면
+      '/logout':  { target: 'http://172.16.15.59:8888', changeOrigin: true },
+    },
+  },
 })
-

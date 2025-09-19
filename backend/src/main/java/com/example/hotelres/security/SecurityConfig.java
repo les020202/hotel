@@ -62,43 +62,50 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // ★ 여기만 바꿈: STATELESS → IF_REQUIRED
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-            	.requestMatchers("/confirm").permitAll()     // ← 추가
-            	.requestMatchers("/pay/**").permitAll()
+            	// 사용자 제출
+            	.requestMatchers(org.springframework.http.HttpMethod.POST, "/api/hotel-applications").hasRole("USER")
+            	 // 관리자 호텔 심사
+            	.requestMatchers("/api/admin/hotel-applications/**").hasRole("ADMIN")
+                .requestMatchers("/confirm").permitAll()
+                .requestMatchers("/pay/**").permitAll()
                 .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )
-            // 기본 폼/Basic 비활성
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
-            // 인증 안됨 → 401
             .exceptionHandling(e -> e.authenticationEntryPoint(
                 (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             ))
             .oauth2Login(oauth -> oauth
                 .authorizationEndpoint(ep -> ep
                     .baseUri("/oauth2/authorization")
-                    // ★ 소셜 재인증 강제 파라미터 주입
-                    .authorizationRequestResolver(
-                        customAuthorizationRequestResolver(clientRegistrationRepository)
-                    )
+                    // ★ 세션 기반 AuthorizationRequest 저장소 명시
+                    .authorizationRequestRepository(new org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository())
+                    .authorizationRequestResolver(customAuthorizationRequestResolver(clientRegistrationRepository))
                 )
+                // ★ 콜백 baseUri 명시 (provider 콘솔과 완전히 동일해야 함)
+                .redirectionEndpoint(re -> re.baseUri("/login/oauth2/code/*"))
                 .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
                 .successHandler(oAuth2SuccessHandler)
                 .failureHandler((req, res, ex) -> {
-                    String target = "http://localhost:5173/login?social_error=" +
-                            URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
-                                    StandardCharsets.UTF_8);
+                    String origin = req.getHeader("Origin");
+                    if (origin == null || origin.isBlank()) origin = "http://172.16.15.59:5173";
+                    String target = origin + "/login?social_error=" +
+                        java.net.URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
+                            java.nio.charset.StandardCharsets.UTF_8);
                     res.setStatus(302);
                     res.sendRedirect(target);
                 })
             )
             .logout(l -> l
                 .logoutUrl("/logout")
-                .deleteCookies("JSESSIONID", "refreshToken") // 서버 세션/리프레시 쿠키 제거
+                .deleteCookies("JSESSIONID", "refreshToken")
                 .invalidateHttpSession(true)
                 .clearAuthentication(true)
                 .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
@@ -152,7 +159,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("http://localhost:5173", "http://127.0.0.1:5173"));
+        cfg.setAllowedOrigins(List.of(
+        	    "http://localhost:5173",
+        	    "http://127.0.0.1:5173",
+        	    "http://172.16.15.59:5173" // ★ 추가
+        	));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);

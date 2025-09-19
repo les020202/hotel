@@ -21,7 +21,7 @@ public class User {
 
     public enum Gender { MALE, FEMALE, UNKNOWN }   // 값 목록은 유지 (null 허용)
     public enum Status { ACTIVE, LOCKED, INACTIVE }
-    public enum Role { ROLE_USER, ROLE_ADMIN }
+    public enum Role { ROLE_USER, ROLE_ADMIN, ROLE_OWNER}
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
