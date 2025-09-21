@@ -1,12 +1,14 @@
+// src/api/auth.js
 import axios from 'axios'
 import router from '@/router'
 
 // === Axios 인스턴스 생성 ===
+// VITE_API_BASE 가 없으면 기본으로 http://localhost:8888/api 사용
 const baseURL = import.meta.env.VITE_API_BASE || 'http://localhost:8888/api'
 
 const api = axios.create({
   baseURL,
-  withCredentials: true, // refresh 쿠키 사용
+  withCredentials: true, // ✅ refresh 쿠키 사용
 })
 
 // === 인증 상태 (메모리 + 로컬스토리지 동기화) ===
@@ -53,17 +55,53 @@ export function setAuth(at, user) {
   emitAuthChanged()
 }
 
-/** 로그인 */
-export async function login(username, password) {
-  const { data } = await api.post('/auth/login', { username, password })
-  setAuth(data.accessToken, data.user)
-  return data
+/** 로그인 (서버는 {loginId, password} 를 받습니다) */
+// ✅ login() 교체본 — 두 형태 모두 지원
+export async function login(payloadOrId, maybePassword) {
+  // 1) 호출 형태 정규화
+  let body;
+  if (typeof payloadOrId === 'object' && payloadOrId !== null) {
+    // login({ loginId, password }) 형태
+    body = {
+      loginId: payloadOrId.loginId ?? payloadOrId.username ?? payloadOrId.id,
+      password: payloadOrId.password,
+    };
+  } else {
+    // login(loginId, password) 형태
+    body = { loginId: payloadOrId, password: maybePassword };
+  }
+
+  // 방어: 값 없으면 바로 에러
+  if (!body?.loginId || !body?.password) {
+    throw new Error('login() requires loginId and password');
+  }
+
+  // 2) 요청 (refresh 쿠키 수신을 위해 withCredentials 유지)
+  const { data } = await api.post('/auth/login', body, { withCredentials: true });
+
+  // 서버가 token 또는 accessToken 둘 중 하나를 줄 수 있으므로 호환
+  const token = data?.token || data?.accessToken;
+  if (!token) throw new Error('No access token in response');
+
+  // 3) 토큰 저장
+  setAuth(token, null);
+
+  // (선택) 프로필 가져와서 userProfile 채우기
+  try {
+    const me = await getMe();
+    setAuth(token, me);
+  } catch {
+    // 프로필 실패해도 로그인은 성공으로 처리
+  }
+
+  return data;
 }
+
 
 /** 로그아웃 */
 export async function logout() {
   try {
-    await api.post('/auth/logout', {})
+    await api.post('/auth/logout', {}, { withCredentials: true })   // ✅ 쿠키 삭제 요청
   } catch {}
   setAuth(null, null) // 이벤트도 함께 발생
   router.push('/login')
@@ -105,15 +143,15 @@ api.interceptors.response.use(
       refreshing = true
       original._retry = true
       try {
+        // ✅ refresh 쿠키를 사용하므로 withCredentials 필요
         const resp = await axios.post(
           `${baseURL}/auth/refresh`,
           {},
           { withCredentials: true }
         )
-        const newToken = resp.data?.accessToken
+        const newToken = resp.data?.token || resp.data?.accessToken
         if (newToken) {
-          // 토큰만 갱신, userProfile은 유지
-          setAuth(newToken, userProfile)
+          setAuth(newToken, userProfile)      // 토큰만 갱신
           return api(original)
         } else {
           setAuth(null, null)
@@ -175,37 +213,30 @@ export async function removeWishlist(hotelId) {
 }
 
 // === 이메일 관련 ===
-// 이메일 중복 체크
 export async function checkEmail(email) {
   return (await api.get('/auth/check-email', { params: { email } })).data
 }
 
-// 이메일 인증 코드 전송
 export async function sendEmailCode(email) {
   return (await api.post('/auth/email/send', { email })).data
 }
 
-// 이메일 인증 코드 검증
 export async function verifyEmailCode(email, code) {
   return (await api.post('/auth/email/verify', { email, code })).data
 }
 
 // === 비밀번호 관련 ===
-// 새 비밀번호 재설정
 export async function resetPassword(email, code, newPassword) {
   return (await api.post('/auth/reset-password', { email, code, newPassword })).data
 }
 
 // === 프로필 관련 ===
-// 프로필 템플릿 변경
 export const setProfileTemplate = (template) =>
   api.put('/users/me/profile/template', { template }).then((r) => r.data)
 
-// 커버 템플릿 변경
 export const setCoverTemplate = (template) =>
   api.put('/users/me/cover/template', { template }).then((r) => r.data)
 
-// 프로필 이미지 업로드 (multipart/form-data)
 export const uploadProfileImage = (file) => {
   const fd = new FormData()
   fd.append('file', file)
@@ -214,7 +245,6 @@ export const uploadProfileImage = (file) => {
     .then((r) => r.data)
 }
 
-// 커버 이미지 업로드 (multipart/form-data)
 export const uploadCoverImage = (file) => {
   const fd = new FormData()
   fd.append('file', file)
@@ -224,21 +254,16 @@ export const uploadCoverImage = (file) => {
 }
 
 // === 사용자 정보 ===
-// 내 정보 (마이페이지용)
 export const getMe = () => api.get('/users/me').then((r) => r.data)
 
-// 사용자 아이디 중복 체크
 export const checkUsername = (loginId) =>
   api.get('/auth/check-username', { params: { loginId } }).then((r) => r.data)
 
-// 회원가입
 export const signup = (payload, verificationCode) =>
   api
     .post(`/auth/signup?verificationCode=${encodeURIComponent(String(verificationCode ?? ''))}`, payload)
     .then((r) => r.data)
 
-// === 이메일 변경 ===
-// 내 이메일 변경 (인증코드 필요)
 export const updateMyEmail = ({ email, verificationCode }) =>
   api.patch('/users/me/email', { email, verificationCode }).then((r) => r.data)
 

@@ -8,6 +8,7 @@ const hotels = ref([])
 const minPrices = ref({})   // ✅ hotelId -> minPrice
 const loading = ref(true)
 const error = ref('')
+const hotelIdOf = (h) => h?.id ?? h?.hotelId
 
 const SIZE = 5
 
@@ -42,7 +43,11 @@ async function loadRandom() {
 }
 
 function goDetail(h) {
-  router.push({ path: '/search', query: { q: h.name, page: 0 } })
+  router.push({
+    name: 'hotel-detail',
+    params: { id: hotelIdOf(h) }   // 👉 /hotels/:id 로 이동
+    // dates는 라우터 가드에서 기본값 보정되므로 생략해도 됨
+  })
 }
 function onCardKey(h, e){
   if (e.key === 'Enter' || e.key === ' ') {

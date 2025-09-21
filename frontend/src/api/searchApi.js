@@ -55,25 +55,27 @@ function normalizeSearchResponse(data, { limit, offset }) {
 /**
  * 호텔 검색
  * @param {Object} p
- * @param {string}   p.q
- * @param {string}   p.checkIn        YYYY-MM-DD
- * @param {string}   p.checkOut       YYYY-MM-DD
- * @param {number}   p.adults
- * @param {number}   p.children
- * @param {number}   p.minPrice       시작가 하한  (서버 표준)
- * @param {number}   p.maxPrice       시작가 상한  (서버 표준)
- * @param {number[]} p.grades         [5,4,...]
- * @param {number[]} p.ratingBands    [1|2|3|4] 다중
- * @param {number[]} p.amenityIds     [amenityId,...]
+ * @param {string}   [p.q]            - 키워드(이름/주소 등 전체 검색)
+ * @param {string}   p.checkIn        - YYYY-MM-DD
+ * @param {string}   p.checkOut       - YYYY-MM-DD
+ * @param {number}   [p.adults=2]
+ * @param {number}   [p.children=0]
+ * @param {number}   [p.minPrice]     - 시작가 하한 (서버 표준)
+ * @param {number}   [p.maxPrice]     - 시작가 상한 (서버 표준)
+ * @param {number[]} [p.grades]       - 예: [5,4,...]
+ * @param {number[]} [p.ratingBands]  - 예: [1|2|3|4] 다중
+ * @param {number[]} [p.amenityIds]   - [amenityId,...]
+ * @param {string}   [p.sort]
  * @param {number}   [p.limit=10]
  * @param {number}   [p.offset=0]
+ * @param {string}   [p.region]       - 정확/부분 일치용 지역 파라미터 (서버에서 사용)
+ * @param {boolean}  [p.regionExact]  - true면 지역 정확 일치(예: 서울특별시만)
+ * @param {number}   [p.guests]       - adults와 동의어
  * ---- 하위호환 입력(자동 매핑) ----
  * @param {number}   [p.priceMin]     -> minPrice
  * @param {number}   [p.priceMax]     -> maxPrice
  * @param {number}   [p.ratingAtLeast]-> ratingBands=[ratingAtLeast]
  * @param {string[]} [p.amenities]    -> amenityIds (서버가 코드 수용 시 그대로 전달 가능)
- * @param {string}   [p.region]       -> q
- * @param {number}   [p.guests]       -> adults
  */
 export async function fetchHotels({
   q = '',
@@ -93,16 +95,20 @@ export async function fetchHotels({
   limit = 10,
   offset = 0,
 
-  // 구명/하위호환 입력
+  // 추가 필터/옵션
+  region,          // ← 프론트에서 전달한 지역 (정식명 권장: 예 '서울특별시')
+  regionExact,     // ← 정확 일치 여부 (true/false)
+  guests,
+
+  // 하위호환 입력
   priceMin,
   priceMax,
   ratingAtLeast,
   amenities,
-  region,
-  guests,
 }) {
   // 하위호환 매핑
-  if (!q && region) q = region;
+  // ⚠️ 기존에는 (!q && region) q = region 으로 region을 q에 덮어썼지만,
+  //     이제는 'region'을 별도 파라미터로 서버에 전달하므로 덮어쓰지 않습니다.
   if ((adults == null || Number.isNaN(adults)) && guests != null) adults = guests;
   if (minPrice == null && priceMin != null) minPrice = priceMin;
   if (maxPrice == null && priceMax != null) maxPrice = priceMax;
@@ -119,14 +125,17 @@ export async function fetchHotels({
   const ratingBandsStr = Array.isArray(ratingBands) && ratingBands.length ? ratingBands.join(',') : undefined;
   const amenityIdsStr  = Array.isArray(amenityIds) && amenityIds.length ? amenityIds.join(',') : undefined;
 
+  // ✅ region / regionExact를 그대로 서버로 전달
   const params = cleanParams({
     q, checkIn, checkOut, adults, children,
-    minPrice, maxPrice,                       // ★ 서버 키로 보냄
+    minPrice, maxPrice,                       // 서버 표준 키
     grades: gradesStr,
     ratingBands: ratingBandsStr,
     amenityIds: amenityIdsStr,
     sort,
     limit, offset,
+    region,            // ★ 추가: 지역 필터
+    regionExact,       // ★ 추가: 정확 일치 여부
   });
 
   const { data } = await api.get("/search/hotels", { params });

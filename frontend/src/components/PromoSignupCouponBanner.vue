@@ -16,8 +16,8 @@
         </p>
   
         <div class="ctas">
-          <button class="btn primary" @click="goSignup">회원가입 / 로그인</button>
-          <button class="btn ghost" @click="goMore">혜택 자세히 보기</button>
+          <button class="btn primary" @click="goSignup">회원가입</button>
+          <button class="btn primary" @click="goLogin">로그인</button>
         </div>
       </div>
   
@@ -51,7 +51,7 @@
   
   const router = useRouter()
   function goSignup(){ router.push('/signup') }
-  function goMore(){ router.push('/event/coupon') } // 적절한 경로로 바꿔주세요
+  function goLogin(){ router.push('/login') }
   </script>
   
   <style scoped>

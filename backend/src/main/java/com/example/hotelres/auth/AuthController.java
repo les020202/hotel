@@ -1,3 +1,4 @@
+// src/main/java/com/example/hotelres/auth/AuthController.java
 package com.example.hotelres.auth;
 
 import com.example.hotelres.auth.dto.*;
@@ -57,76 +58,75 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("success", true));
     }
 
-
-
     @PostMapping("/login")
-public ResponseEntity<?> login(@RequestBody LoginRequest req) {
-    var userOpt = users.findByLoginId(req.getLoginId());
-    if (userOpt.isEmpty()) {
-        // 존재하지 않는 계정 → 실패 횟수 정보 없음
-        return ResponseEntity.status(401)
-                .body(Map.of("error", "INVALID_CREDENTIALS", "attempts", 0, "locked", false));
-    }
+    public ResponseEntity<?> login(@RequestBody LoginRequest req) {
+        var userOpt = users.findByLoginId(req.getLoginId());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "INVALID_CREDENTIALS", "attempts", 0, "locked", false));
+        }
 
-    var u = userOpt.get();
+        var u = userOpt.get();
 
-    // 1️⃣ 잠금 상태 체크
-    if (u.getStatus() == User.Status.LOCKED) {
-        if (u.getLockedAt() != null &&
-            u.getLockedAt().plusHours(1).isBefore(java.time.LocalDateTime.now())) {
-            // 잠금 해제
-            u.setStatus(User.Status.ACTIVE);
+        // 1️⃣ 잠금 상태 체크
+        if (u.getStatus() == User.Status.LOCKED) {
+            if (u.getLockedAt() != null &&
+                u.getLockedAt().plusHours(1).isBefore(java.time.LocalDateTime.now())) {
+                // 잠금 해제
+                u.setStatus(User.Status.ACTIVE);
+                u.setFailedLoginAttempts(0);
+                u.setLockedAt(null);
+                users.save(u);
+            } else {
+                // 여전히 잠금 상태
+                return ResponseEntity.status(403)
+                        .body(Map.of("error", "ACCOUNT_LOCKED", "locked", true));
+            }
+        }
+
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(req.getLoginId(), req.getPassword())
+            );
+
+            // 로그인 성공 → 실패 횟수 초기화
             u.setFailedLoginAttempts(0);
             u.setLockedAt(null);
             users.save(u);
-        } else {
-            // 여전히 잠금 상태
-            return ResponseEntity.status(403)
-                    .body(Map.of("error", "ACCOUNT_LOCKED", "locked", true));
+
+            String access  = jwt.generateAccess(u.getLoginId(), u.getRole().name());
+            String refresh = jwt.generateRefresh(u.getLoginId());
+
+            // ✅ 크로스 사이트 XHR 위해 SameSite=None; Secure; Path=/ 로 설정
+            var cookie = ResponseCookie.from("refreshToken", refresh)
+                    .httpOnly(true)
+                    .secure(true)                 // SameSite=None 은 Secure 필수
+                    .sameSite("None")
+                    .path("/")
+                    .maxAge(jwt.getRefreshExpMs()/1000)
+                    .build();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                    .body(Map.of("token", access));
+
+        } catch (AuthenticationException e) {
+            u.setFailedLoginAttempts(u.getFailedLoginAttempts() + 1);
+            if (u.getFailedLoginAttempts() >= 5) {
+                u.setStatus(User.Status.LOCKED);
+                u.setLockedAt(java.time.LocalDateTime.now());
+            }
+            users.save(u);
+
+            boolean locked = u.getStatus() == User.Status.LOCKED;
+            return ResponseEntity.status(401)
+                    .body(Map.of(
+                            "error", "INVALID_CREDENTIALS",
+                            "attempts", u.getFailedLoginAttempts(),
+                            "locked", locked
+                    ));
         }
     }
-
-    try {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(req.getLoginId(), req.getPassword())
-        );
-
-        // 로그인 성공 → 실패 횟수 초기화
-        u.setFailedLoginAttempts(0);
-        u.setLockedAt(null);
-        users.save(u);
-
-        String access  = jwt.generateAccess(u.getLoginId(), u.getRole().name());
-        String refresh = jwt.generateRefresh(u.getLoginId());
-        var cookie = ResponseCookie.from("refreshToken", refresh)
-                .httpOnly(true).secure(false)
-                .sameSite("Lax").path("/api/auth")
-                .maxAge(jwt.getRefreshExpMs()/1000).build();
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(Map.of("token", access));
-
-    } catch (AuthenticationException e) {
-        // 로그인 실패 → 실패 횟수 증가
-        u.setFailedLoginAttempts(u.getFailedLoginAttempts() + 1);
-        if (u.getFailedLoginAttempts() >= 5) {
-            u.setStatus(User.Status.LOCKED); // 잠금
-            u.setLockedAt(java.time.LocalDateTime.now());
-        }
-        users.save(u);
-
-        boolean locked = u.getStatus() == User.Status.LOCKED;
-        return ResponseEntity.status(401)
-                .body(Map.of(
-                        "error", "INVALID_CREDENTIALS",
-                        "attempts", u.getFailedLoginAttempts(),
-                        "locked", locked
-                ));
-    }
-}
-
-
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@CookieValue(name="refreshToken", required=false) String rt) {
@@ -141,10 +141,12 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
             String newAccess  = jwt.generateAccess(u.getLoginId(), u.getRole().name());
             String newRefresh = jwt.generateRefresh(u.getLoginId());
 
+            // ✅ 재발급도 동일 설정
             var cookie = ResponseCookie.from("refreshToken", newRefresh)
-                    .httpOnly(true).secure(false)  // prod: true
-                    .sameSite("Lax")
-                    .path("/api/auth")
+                    .httpOnly(true)
+                    .secure(true)
+                    .sameSite("None")
+                    .path("/")
                     .maxAge(jwt.getRefreshExpMs()/1000)
                     .build();
 
@@ -158,17 +160,18 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(){
+        // ✅ 쿠키 즉시 만료 (SameSite=None; Secure; Path=/)
         var cookie = ResponseCookie.from("refreshToken","")
-                .httpOnly(true).secure(false)   // prod: true
-                .sameSite("Lax")
-                .path("/api/auth")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("None")
+                .path("/")
                 .maxAge(0)
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(Map.of("success", true));
     }
-
 
     // 비밀번호 재설정
     @PostMapping("/reset-password")
@@ -177,5 +180,4 @@ public ResponseEntity<?> login(@RequestBody LoginRequest req) {
         if (success) return ResponseEntity.ok(Map.of("message", "Password reset"));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "User not found"));
     }
-
 }
