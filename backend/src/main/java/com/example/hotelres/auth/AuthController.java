@@ -31,6 +31,23 @@ public class AuthController {
     // ★ 추가: 이메일 코드 저장/검증 컴포넌트
     private final EmailCodeStore emailCodeStore;
 
+    // --------------------------- 개발용 쿠키 빌더 ---------------------------
+    /**
+     * 개발환경(HTTP)에서 refresh 쿠키가 버려지지 않도록
+     * Secure=false, SameSite=Lax, Path=/api/auth 로 발급합니다.
+     * (운영 HTTPS에서는 Secure=true, SameSite=None, Path=/ 로 바꾸세요)
+     */
+    private ResponseCookie buildDevRefreshCookie(String value, long maxAgeSeconds) {
+        return ResponseCookie.from("refreshToken", value)
+                .httpOnly(true)
+                .secure(false)       // HTTP 개발환경에서는 false
+                .sameSite("Lax")     // same-origin처럼 동작
+                .path("/api/auth")   // 프록시 기준 경로
+                .maxAge(maxAgeSeconds)
+                .build();
+    }
+    // ---------------------------------------------------------------------
+
     @GetMapping("/check-username")
     public Map<String, Boolean> checkUsername(@RequestParam String loginId) {
         return Map.of("available", !users.existsByLoginId(loginId));
@@ -97,14 +114,8 @@ public class AuthController {
             String access  = jwt.generateAccess(u.getLoginId(), u.getRole().name());
             String refresh = jwt.generateRefresh(u.getLoginId());
 
-            // ✅ 크로스 사이트 XHR 위해 SameSite=None; Secure; Path=/ 로 설정
-            var cookie = ResponseCookie.from("refreshToken", refresh)
-                    .httpOnly(true)
-                    .secure(true)                 // SameSite=None 은 Secure 필수
-                    .sameSite("None")
-                    .path("/")
-                    .maxAge(jwt.getRefreshExpMs()/1000)
-                    .build();
+            // ★ 개발용 쿠키 발급
+            var cookie = buildDevRefreshCookie(refresh, jwt.getRefreshExpMs()/1000);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, cookie.toString())
@@ -141,14 +152,8 @@ public class AuthController {
             String newAccess  = jwt.generateAccess(u.getLoginId(), u.getRole().name());
             String newRefresh = jwt.generateRefresh(u.getLoginId());
 
-            // ✅ 재발급도 동일 설정
-            var cookie = ResponseCookie.from("refreshToken", newRefresh)
-                    .httpOnly(true)
-                    .secure(true)
-                    .sameSite("None")
-                    .path("/")
-                    .maxAge(jwt.getRefreshExpMs()/1000)
-                    .build();
+            // ★ 개발용 쿠키 재발급
+            var cookie = buildDevRefreshCookie(newRefresh, jwt.getRefreshExpMs()/1000);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, cookie.toString())
@@ -160,14 +165,8 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(){
-        // ✅ 쿠키 즉시 만료 (SameSite=None; Secure; Path=/)
-        var cookie = ResponseCookie.from("refreshToken","")
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("None")
-                .path("/")
-                .maxAge(0)
-                .build();
+        // ★ 개발용 쿠키 즉시 만료
+        var cookie = buildDevRefreshCookie("", 0);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(Map.of("success", true));

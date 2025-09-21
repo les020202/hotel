@@ -17,11 +17,11 @@ async function onLogin() {
   loading.value = true;
   try {
     const { token } = await login({ loginId: loginId.value, password: password.value });
-    localStorage.setItem('token', token);
+    // login() 내부에서 토큰 저장과 프로필 로딩을 처리하므로 여기선 라우팅만
     router.push('/main');
   } catch (e) {
-    const err = e?.response?.data?.error;
-    const attempts = e?.response?.data?.attempts ?? 0; // 서버에서 온 실패 횟수
+    const err = e?.response?.data?.error || e?.message;
+    const attempts = e?.response?.data?.attempts ?? 0;
     const locked   = e?.response?.data?.locked ?? false;
 
     if (locked) {
@@ -35,7 +35,6 @@ async function onLogin() {
     loading.value = false;
   }
 }
-
 </script>
 
 <template>
@@ -54,11 +53,12 @@ async function onLogin() {
       </aside>
 
       <!-- Right form -->
+      <!-- ✅ 변경: div → form 으로 감싸고 submit 핸들링 -->
       <div class="auth-pane">
         <h2 class="title">로그인</h2>
         <p class="subtitle">계정 정보를 입력해주세요.</p>
 
-        <div class="form">
+        <form class="form" @submit.prevent="onLogin">
           <div class="field">
             <label class="sr-only" for="loginId">아이디</label>
             <input
@@ -108,7 +108,8 @@ async function onLogin() {
             <RouterLink class="link" to="/find-password">비밀번호 찾기</RouterLink>
           </div>
 
-          <button class="btn primary" :disabled="loading" @click="onLogin">
+          <!-- ✅ 변경: 버튼을 submit 으로 -->
+          <button class="btn primary" :disabled="loading" type="submit">
             <span v-if="!loading">로그인</span>
             <span v-else class="spinner" aria-label="진행중"></span>
           </button>
@@ -136,7 +137,7 @@ async function onLogin() {
           </div>
 
           <p class="text-sm center" v-if="msg">{{ msg }}</p>
-        </div>
+        </form>
       </div>
     </section>
   </div>
@@ -201,6 +202,7 @@ async function onLogin() {
 .title{ margin:0 0 6px; font-size:24px; font-weight:800; color:var(--text-1) }
 .subtitle{ margin:0 0 20px; color:var(--text-2); font-size:13px }
 
+/* ✅ form 유지 (엔터 제출 작동) */
 .form{ display:grid; gap:14px; margin-top:8px }
 
 /* 입력칸 */
@@ -261,9 +263,7 @@ async function onLogin() {
 .divider{ display:flex; align-items:center; gap:10px; margin:16px 0; color:#4a5a75; font-size:12px }
 .divider::before,.divider::after{ content:""; flex:1; height:1px; background:#e1ecff }
 
-/* ===================== */
-/* 동그란 소셜 아이콘   */
-/* ===================== */
+/* 동그란 소셜 아이콘 */
 .social-icons{
   display:flex; justify-content:center; gap:16px; margin-top:6px;
 }
@@ -276,10 +276,10 @@ async function onLogin() {
 }
 .icon-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 22px rgba(16,44,84,.12); }
 .icon-img{ width:22px; height:22px; display:block; }
-.icon-img.invert{ filter: invert(1); }       /* 검정 SVG를 흰색으로 */
+.icon-img.invert{ filter: invert(1); }
 
-.icon-btn.naver{ background:#03c75a; border-color:#03c75a; }   /* Naver 초록 */
-.icon-btn.kakao{ background:#fee500; border-color:#e6cd00; }   /* Kakao 노랑 */
+.icon-btn.naver{ background:#03c75a; border-color:#03c75a; }
+.icon-btn.kakao{ background:#fee500; border-color:#e6cd00; }
 
 /* 메시지 */
 .text-sm.center{ text-align:center; font-size:13px; color:#e11d48; }

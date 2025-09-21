@@ -1,9 +1,12 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { addWishlist, removeWishlist } from '@/api/auth'  // ✅ 위시 API 사용
 
 const props = defineProps({
   hotel: { type: Object, required: true },
 })
+const router = useRouter()
 
 // 대표 이미지(없으면 placeholder)
 const cover = computed(() =>
@@ -23,14 +26,43 @@ const starArray = computed(() => Array.from({ length: 5 }, (_, i) => i < stars.v
 const locationText = computed(() =>
   [props.hotel.region, props.hotel.address].filter(Boolean).join(' · ')
 )
+
+// ✅ 찜 상태/액션 (디자인 변경 없이 기능만 추가)
+const wished = ref(!!props.hotel.wished)
+const saving = ref(false)
+
+async function toggleWish () {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (!wished.value) {
+      await addWishlist(props.hotel.id)        // POST /api/my/wishlist {hotelId}
+      wished.value = true
+    } else {
+      await removeWishlist(props.hotel.id)     // DELETE /api/my/wishlist/:id
+      wished.value = false
+    }
+  } catch (e) {
+    // 인증 필요 시 로그인으로
+    if (e?.response?.status === 401) {
+      router.push({ path: '/login', query: { redirect: location.pathname + location.search } })
+    } else {
+      console.error(e)
+      alert('잠시 후 다시 시도해 주세요.')
+    }
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
   <article class="hl-item">
     <!-- 좌측 썸네일 -->
     <router-link :to="`/hotels/${hotel.id}`" class="thumb">
-  <img :src="hotel.coverImageUrl || fallback" :alt="hotel.name" />
-</router-link>
+      <!-- ✅ cover 사용 (기존 fallback 식별자 오류 수정) -->
+      <img :src="cover" :alt="hotel.name" />
+    </router-link>
 
     <!-- 중앙 정보 -->
     <div class="middle">
@@ -50,8 +82,17 @@ const locationText = computed(() =>
           평점 <b>{{ Number(hotel.rating).toFixed(1) }}</b>
         </span>
       </div>
+
       <div class="actions">
-        <button class="btn ghost">♡ 찜하기</button>
+        <!-- ✅ 기능만 추가: 클릭하면 위시 토글 / 저장중 비활성화 -->
+        <button
+          class="btn ghost"
+          :disabled="saving"
+          :aria-pressed="wished"
+          @click.stop.prevent="toggleWish"
+        >
+          ♡ 찜하기
+        </button>
       </div>
     </div>
 

@@ -11,8 +11,17 @@ const api = axios.create({
   withCredentials: true, // ✅ refresh 쿠키 사용
 })
 
+// === 라우터는 'token'을 사용 → 1순위 'token', 호환용으로 'accessToken'도 함께 사용
+const KEY_PRIMARY = 'token'
+const KEY_LEGACY  = 'accessToken'
+
 // === 인증 상태 (메모리 + 로컬스토리지 동기화) ===
-let accessToken = localStorage.getItem('accessToken') || null
+// 우선순위: token → accessToken
+let accessToken =
+  localStorage.getItem(KEY_PRIMARY) ||
+  localStorage.getItem(KEY_LEGACY) ||
+  null
+
 let userProfile = JSON.parse(localStorage.getItem('userProfile') || 'null')
 
 export function getUser() {
@@ -20,7 +29,12 @@ export function getUser() {
 }
 
 export function isLoggedIn() {
-  return !!accessToken
+  // 어느 키든 존재하면 로그인 상태로 간주
+  return !!(
+    accessToken ||
+    localStorage.getItem(KEY_PRIMARY) ||
+    localStorage.getItem(KEY_LEGACY)
+  )
 }
 
 /** 👉 로그인 상태 변경을 앱 전역으로 브로드캐스트 */
@@ -32,7 +46,7 @@ function emitAuthChanged() {
       })
     )
   } catch (_) {
-    /* no-op (SSR 등) */
+    /* no-op */
   }
 }
 
@@ -42,12 +56,21 @@ export function onAuthChanged(handler) {
   return () => window.removeEventListener('auth:changed', handler)
 }
 
-/** 토큰/유저 저장 + 브로드캐스트 */
+/** 토큰/유저 저장 + 브로드캐스트
+ * - 라우터와 일치하도록 'token' 키를 1순위로 저장
+ * - 과거 코드 호환을 위해 'accessToken'에도 동일 값 동기화
+ */
 export function setAuth(at, user) {
-  accessToken = at
+  accessToken = at || null
   userProfile = user || null
-  if (at) localStorage.setItem('accessToken', at)
-  else localStorage.removeItem('accessToken')
+
+  if (at) {
+    localStorage.setItem(KEY_PRIMARY, at)   // 'token'
+    localStorage.setItem(KEY_LEGACY, at)    // 'accessToken' (호환)
+  } else {
+    localStorage.removeItem(KEY_PRIMARY)
+    localStorage.removeItem(KEY_LEGACY)
+  }
 
   if (user) localStorage.setItem('userProfile', JSON.stringify(user))
   else localStorage.removeItem('userProfile')
@@ -56,54 +79,60 @@ export function setAuth(at, user) {
 }
 
 /** 로그인 (서버는 {loginId, password} 를 받습니다) */
-// ✅ login() 교체본 — 두 형태 모두 지원
 export async function login(payloadOrId, maybePassword) {
-  // 1) 호출 형태 정규화
-  let body;
+  // 1) 인자 정규화: login({ loginId, password }) 또는 login(loginId, password)
+  let body
   if (typeof payloadOrId === 'object' && payloadOrId !== null) {
-    // login({ loginId, password }) 형태
     body = {
       loginId: payloadOrId.loginId ?? payloadOrId.username ?? payloadOrId.id,
       password: payloadOrId.password,
-    };
+    }
   } else {
-    // login(loginId, password) 형태
-    body = { loginId: payloadOrId, password: maybePassword };
+    body = { loginId: payloadOrId, password: maybePassword }
   }
 
-  // 방어: 값 없으면 바로 에러
   if (!body?.loginId || !body?.password) {
-    throw new Error('login() requires loginId and password');
+    throw new Error('login() requires loginId and password')
   }
 
-  // 2) 요청 (refresh 쿠키 수신을 위해 withCredentials 유지)
-  const { data } = await api.post('/auth/login', body, { withCredentials: true });
-
-  // 서버가 token 또는 accessToken 둘 중 하나를 줄 수 있으므로 호환
-  const token = data?.token || data?.accessToken;
-  if (!token) throw new Error('No access token in response');
-
-  // 3) 토큰 저장
-  setAuth(token, null);
-
-  // (선택) 프로필 가져와서 userProfile 채우기
   try {
-    const me = await getMe();
-    setAuth(token, me);
-  } catch {
-    // 프로필 실패해도 로그인은 성공으로 처리
+    // 2) 로그인 요청 (리프레시 쿠키 수신을 위해 withCredentials 유지)
+    const { data } = await api.post('/auth/login', body, { withCredentials: true })
+
+    // 서버가 token 또는 accessToken을 줄 수 있으므로 모두 대응
+    const token = data?.accessToken ?? data?.token
+    if (!token) throw new Error('No access token in response')
+
+    // 3) 토큰 저장 (유저 정보는 잠시 null → /users/me로 채움)
+    setAuth(token, null)
+
+    // 4) 프로필 불러와 state 갱신
+    try {
+      const me = await getMe()
+      setAuth(token, me)
+    } catch (_) {
+      // 프로필 실패해도 로그인은 성공으로 간주
+    }
+
+    return data
+  } catch (err) {
+    const resp = err?.response
+    if (resp?.data) {
+      const e = new Error(resp.data?.error || 'LOGIN_FAILED')
+      e.attempts = resp.data?.attempts
+      e.locked = resp.data?.locked
+      throw e
+    }
+    throw err
   }
-
-  return data;
 }
-
 
 /** 로그아웃 */
 export async function logout() {
   try {
-    await api.post('/auth/logout', {}, { withCredentials: true })   // ✅ 쿠키 삭제 요청
+    await api.post('/auth/logout', {}, { withCredentials: true }) // ✅ 쿠키 삭제 요청
   } catch {}
-  setAuth(null, null) // 이벤트도 함께 발생
+  setAuth(null, null)
   router.push('/login')
 }
 
@@ -111,7 +140,16 @@ export async function logout() {
  * Axios 인터셉터
  * ---------------------------------------------------------------------------*/
 api.interceptors.request.use((config) => {
-  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`
+  // 다른 탭에서 갱신된 경우 반영: 최신 토큰 재확인
+  const latest =
+    localStorage.getItem(KEY_PRIMARY) ||
+    localStorage.getItem(KEY_LEGACY) ||
+    accessToken
+
+  if (latest) {
+    accessToken = latest
+    config.headers.Authorization = `Bearer ${latest}`
+  }
   return config
 })
 
@@ -151,7 +189,7 @@ api.interceptors.response.use(
         )
         const newToken = resp.data?.token || resp.data?.accessToken
         if (newToken) {
-          setAuth(newToken, userProfile)      // 토큰만 갱신
+          setAuth(newToken, userProfile) // 토큰만 갱신
           return api(original)
         } else {
           setAuth(null, null)

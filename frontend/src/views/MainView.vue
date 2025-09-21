@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getMe, logout as apiLogout } from '@/api/auth'
+import { getMe, logout as apiLogout, isLoggedIn, setAuth } from '@/api/auth'
 import { useRouter } from 'vue-router'
+
 
 import SearchBar from '@/components/SearchBar.vue'
 import RegionCards from '@/components/RegionCards.vue'
@@ -26,26 +27,45 @@ async function fetchMe () {
   try {
     me.value = await getMe()
   } catch (e) {
-    // 토큰 없거나 실패해도 메인은 공개 페이지이므로 화면은 유지
-    msg.value = e?.response?.status ? `토큰 확인 실패: ${e.response.status}` : ''
+    msg.value = `토큰 확인 실패: ${e?.response?.status || ''}`
   }
 }
 
 onMounted(async () => {
-  // 소셜 로그인 성공 시 /main#token=... 처리
-  const m = location.hash.match(/token=([^&]+)/)
+  // 1) 소셜 로그인 성공 시 /main#token=... 으로 오므로, 해시에서 토큰 추출
+  //   (token= 다음 값만 안전하게 파싱)
+  const m = location.hash.match(/(?:^|#|&)token=([^&]+)/)
   if (m) {
     const token = decodeURIComponent(m[1])
-    localStorage.setItem('token', token)
-    history.replaceState({}, '', location.pathname)
+    // ✅ 앱 전역 규격: setAuth → localStorage('accessToken') 저장 + 브로드캐스트
+    setAuth(token, null)
+    // 주소창에서 해시 제거 (쿼리 유지)
+    history.replaceState({}, '', location.pathname + location.search)
   }
 
-  // 토큰이 있으면 내 정보만 불러옴(없어도 메인 화면 그대로)
-  if (localStorage.getItem('token')) {
-    await fetchMe()
+  // 1-1) (옵션) 예전 로컬 키 'token'을 쓰던 경우 자동 마이그레이션
+  const legacy = localStorage.getItem('token')
+  if (legacy && !localStorage.getItem('accessToken')) {
+    setAuth(legacy, null)
+    localStorage.removeItem('token')
+  }
+
+  // 2) 저장된 토큰이 전혀 없으면 로그인 페이지로
+  if (!isLoggedIn()) {
+    router.push('/login')
+    return
+  }
+
+  // 3) 내 정보 로딩 (토큰이 있을 때만 호출 → 불필요한 401 방지)
+  try {
+    const me = await getMe()
+    // 프로필까지 전역 상태에 반영 (드롭다운 이름 등 즉시 사용)
+    setAuth(localStorage.getItem('accessToken'), me)
+  } catch {
+    // 여기서 401 나면 인터셉터가 refresh 시도 후에도 실패한 케이스.
+    // 필요하면 router.push('/login') 등으로 처리 가능.
   }
 })
-
 async function logout () {
   try {
     await apiLogout().catch(() => {})

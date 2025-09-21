@@ -23,21 +23,20 @@
 
           <div ref="dropdownRef" class="dropdown-wrap">
             <button class="btn ghost" @click="open = !open" :aria-expanded="open" aria-haspopup="menu">
-              ▼
+              {{ user.name }}
             </button>
 
             <!-- ▼ 드롭다운: name 노출 + 로그아웃 가능 -->
             <div v-if="open" role="menu" class="dropdown card p-4">
               <div class="userbox">
-                <div class="user-name">{{ user?.name || user?.nickname || user?.username }}</div>
+                <div class="user-name">{{ user?.name }}</div>
                 <div class="user-sub" v-if="user?.email">{{ user.email }}</div>
               </div>
               <hr class="sep" />
 
               <button class="btn ghost w100" @click="go('/mypage')">마이페이지</button>
-              <button class="btn ghost w100" @click="go('/payments')">예약내역</button>
-              <button class="btn ghost w100" @click="go('/settings')">설정</button>
-              <button class="btn ghost w100" @click="go('/support')">고객지원</button>
+              <button class="btn ghost w100" @click="go('/mypage/history')">예약내역</button>
+              <button class="btn ghost w100" @click="go('/mypage/support')">고객지원</button>
 
               <hr class="sep" />
               <button class="btn primary w100" @click="doLogout">로그아웃</button>
@@ -108,7 +107,7 @@ const centerTitle = computed(() => {
 })
 
 function onWishlistClick(){
-  alert('위시리스트는 추후 화면에서 제공됩니다.')
+  router.push('/wishlist')
 }
 function onHotelCreateClick(){
   alert('호텔 등록은 추후 제공됩니다.')
@@ -126,6 +125,11 @@ async function doLogout(){
     router.push('/login')
   }
 }
+
+function goWishlist() { 
+  router.push('/wishlist') 
+}
+
 </script>
 
 <style scoped>
