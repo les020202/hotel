@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import SearchBar from '@/components/SearchBar.vue'
 
 /**
  * 커스터마이즈 가능한 프롭들
@@ -49,21 +48,19 @@ onUnmounted(() => {
   <section
     class="hero"
     :style="{
-      '--hero-url': `url('${hero}')`,
       '--hero-h': typeof height === 'number' ? height + 'px' : String(height)
     }"
   >
-    <div class="hero__scrim"></div>
+    <!-- ✅ 배경 전용 레이어: 여기서만 클리핑 -->
+    <div class="hero__bg" :style="{ '--hero-url': `url('${hero}')` }">
+      <div class="hero__scrim"></div>
+    </div>
 
+    <!-- 실제 콘텐츠 -->
     <div class="hero__inner">
       <h1 class="hero__title">{{ title }}</h1>
       <p class="hero__subtitle">{{ subtitle }}</p>
 
-      <!-- SearchBar는 내부에 검색 로직이 있으므로
-           v-model 전달 없이 그대로 사용해도 동작 -->
-      <div class="hero__search">
-        <SearchBar />
-      </div>
     </div>
   </section>
 </template>
@@ -73,29 +70,49 @@ onUnmounted(() => {
   position: relative;
   height: var(--hero-h);
   border-radius: 20px;
+  /* ✅ 팝오버가 잘리지 않도록 숨김 제거 */
+  overflow: visible;
+}
+
+/* 배경을 별도 레이어로 분리하여 여기서만 클리핑 */
+.hero__bg{
+  position:absolute; inset:0;
+  border-radius: inherit;
   overflow: hidden;
   background: center/cover no-repeat var(--hero-url);
+  z-index: 0;
 }
+
+/* 오버레이는 시각적으로만 깔고, 클릭은 통과 */
 .hero__scrim{
   position:absolute; inset:0;
   background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.10));
+  pointer-events: none; /* ✅ 클릭 방해 금지 */
 }
+
+/* 검색바와 텍스트는 배경 위로 */
 .hero__inner{
-  position:absolute; inset:0;
+  position: relative;
+  z-index: 1; /* ✅ 확실히 위로 */
+  inset:0;
   padding: 24px;
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
   gap: 18px; color:#fff; text-align:center;
 }
+
 .hero__title{ font-size: 38px; font-weight: 800; letter-spacing:-.3px; margin:0; }
 .hero__subtitle{ margin:0; opacity:.96; }
 
+/* 팝오버가 겹칠 때를 대비해 z-index 조금 올려 둠 */
 .hero__search{
   width: min(980px, 96%);
   background:#fff;
   border-radius: 20px;
   padding: 14px;
   box-shadow: 0 16px 36px rgba(0,0,0,.20);
+  position: relative;
+  z-index: 10;
 }
 
 /* SearchBar 기본 박스(테두리/그림자) 제거해서 깨끗하게 */

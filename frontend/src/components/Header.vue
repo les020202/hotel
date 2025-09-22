@@ -126,10 +126,6 @@ async function doLogout(){
   }
 }
 
-function goWishlist() { 
-  router.push('/wishlist') 
-}
-
 </script>
 
 <style scoped>
