@@ -69,6 +69,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
                 // 공개 엔드포인트 (퍼미션이 필요 없는 경로들)
+                .requestMatchers("/api/owner/**").hasRole("OWNER")
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // 프리플라이트 요청 허용
                 .requestMatchers("/confirm", "/pay/**", "/oauth2/**", "/login/oauth2/**", "/api/auth/**")
                 .permitAll() // 로그인, 인증 관련
