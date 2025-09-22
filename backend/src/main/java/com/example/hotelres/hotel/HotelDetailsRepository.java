@@ -146,4 +146,8 @@ public class HotelDetailsRepository {
         dto.setAmenities(List.of());
         return dto;
     }
+	public boolean existsById(Long id) {
+		// TODO Auto-generated method stub
+		return false;
+	}
 }

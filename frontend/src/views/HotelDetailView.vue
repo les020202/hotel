@@ -57,8 +57,22 @@
         <div class="text-rose-500 text-2xl font-extrabold">
           ₩{{ money(startingFromPerNight) }}<span class="text-base text-gray-500">/night</span>
         </div>
+
+        <!-- ✅ 호텔 단위 찜 토글 버튼 -->
         <div class="mt-2 flex items-center justify-end gap-2">
-          <button class="border rounded-xl w-10 h-10 grid place-items-center">♡</button>
+          <button
+            class="border rounded-xl w-10 h-10 grid place-items-center"
+            :title="hotelWished ? '찜 해제' : '찜하기'"
+            @click="onToggleHotelWish"
+          >
+            <svg v-if="hotelWished" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6.5 3.5 5 5.5 5c1.7 0 3.25 1.03 3.97 2.57h1.06C11.25 6.03 12.8 5 14.5 5 16.5 5 18 6.5 18 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" class="w-6 h-6 stroke-gray-700 fill-none">
+              <path stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
+                    d="M12.1 20.3C7.14 15.78 4 12.94 4 9.5 4 7.5 5.5 6 7.5 6c1.54 0 3.04.99 3.57 2.36h1.87C13.46 6.99 14.96 6 16.5 6 18.5 6 20 7.5 20 9.5c0 3.44-3.14 6.28-8.1 10.8z"/>
+            </svg>
+          </button>
           <button class="border rounded-xl w-10 h-10 grid place-items-center">↗</button>
           <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl">
             Book now
@@ -67,25 +81,20 @@
       </div>
     </header>
 
-    <!-- ===== 갤러리 (Slide1: 메인 2×2 + 4칸 / Slide2: 8칸) ===== -->
+    <!-- ===== 갤러리 ===== -->
     <section class="relative">
-      <!-- 화면 거의 꽉 차게(최대 1600px), 중앙 정렬 -->
       <div class="relative left-1/2 -translate-x-1/2 w-screen">
         <div class="mx-auto w-full max-w-[min(92vw,1600px)] px-6 lg:px-12">
           <div class="relative">
             <transition name="fade" mode="out-in">
-              <!-- 공통: 정사각 타일 그리드 -->
               <div :key="pageIndex" class="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
                 <!-- Slide 1 -->
                 <template v-if="pageIndex === 0">
-                  <!-- 메인 1장: 정사각 2×2 span -->
                   <div class="col-span-2 row-span-2 relative overflow-hidden rounded-2xl">
                     <div class="w-full pb-[100%]"></div>
                     <img :src="coverImage" alt="메인"
                          class="absolute inset-0 h-full w-full object-cover object-center" loading="eager" />
                   </div>
-
-                  <!-- 우측/하단 4칸 -->
                   <div v-for="(img,i) in firstFour" :key="'p0-'+i"
                        class="relative overflow-hidden rounded-2xl">
                     <div class="w-full pb-[100%]"></div>
@@ -93,7 +102,7 @@
                   </div>
                 </template>
 
-                <!-- Slide 2: 8칸 -->
+                <!-- Slide 2 -->
                 <template v-else>
                   <div v-for="(img,i) in secondEight" :key="'p1-'+i"
                        class="relative overflow-hidden rounded-2xl">
@@ -104,7 +113,6 @@
               </div>
             </transition>
 
-            <!-- 좌/우 네비(그리드에 근접) -->
             <button v-if="pageCount>1"
                     class="hidden md:grid place-items-center absolute -left-1 top-1/2 -translate-y-1/2
                            w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow"
@@ -114,7 +122,6 @@
                            w-10 h-10 rounded-full bg-white/90 hover:bg-white shadow"
                     @click="nextPage" aria-label="Next">›</button>
 
-            <!-- 인디케이터: 바로 아래에 붙임 -->
             <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-2">
               <button v-for="i in 2" :key="'dot-'+i" @click="goPage(i-1)"
                       class="h-2 w-10 rounded-full"
@@ -140,7 +147,6 @@
       <ul v-else class="space-y-8">
         <li v-for="t in offers" :key="t.roomTypeId" class="rounded-2xl border shadow-sm p-4 md:p-5">
           <div class="grid grid-cols-12 gap-4 md:gap-6">
-            <!-- 좌: 객실 이미지 -->
             <div class="col-span-12 md:col-span-5">
               <div class="relative h-48 md:h-56 rounded-xl overflow-hidden bg-neutral-100">
                 <img :src="safeImg(t.templateImageUrl)" class="w-full h-full object-cover" alt="">
@@ -150,7 +156,6 @@
               </div>
             </div>
 
-            <!-- 우: 설명/가격/버튼 -->
             <div class="col-span-12 md:col-span-7 flex flex-col">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -166,6 +171,7 @@
                 </div>
               </div>
 
+              <!-- 기존: 객실 카드 내 하트(로컬 토글) 그대로 유지 -->
               <div class="mt-2 text-sm text-amber-600" v-if="t.minRemaining != null && t.minRemaining <= 3">
                 남은객실 {{ t.minRemaining }}개
               </div>
@@ -173,10 +179,10 @@
               <div class="mt-auto pt-4 flex items-center justify-end gap-3">
                 <button
                   class="border rounded-xl w-11 h-11 grid place-items-center"
-                  :title="isWished(t.roomTypeId) ? '찜 해제' : '찜하기'"
-                  @click="toggleWish(t.roomTypeId)"
+                  :title="isWishedRoom(t.roomTypeId) ? '찜 해제' : '찜하기'"
+                  @click="toggleWishRoom(t.roomTypeId)"
                 >
-                  <svg v-if="isWished(t.roomTypeId)" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
+                  <svg v-if="isWishedRoom(t.roomTypeId)" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6.5 3.5 5 5.5 5c1.7 0 3.25 1.03 3.97 2.57h1.06C11.25 6.03 12.8 5 14.5 5 16.5 5 18 6.5 18 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                   </svg>
                   <svg v-else viewBox="0 0 24 24" class="w-6 h-6 stroke-gray-700 fill-none">
@@ -199,15 +205,19 @@ import { onMounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getHotelDetail } from '@/api/hotelApi'
 
+/* ✅ 위시리스트 + 인증 */
+import { ensureWishlistLoaded, isWished, toggleWishlist } from '@/api/wishlistApi'
+import { isLoggedIn } from '@/api/auth'
+
 // ===== 상태 =====
 const route   = useRoute()
 const router  = useRouter()
-const hotel   = ref(null)   // { id, name, region, address, rating, gradeLevel }
-const gallery = ref(null)   // { cover, roomDefaults: [ {url, alt}, ... ] }
-const offers  = ref([])     // [{roomTypeId, name, capacity, areaSqm, minRemaining, priceSum, nights, templateImageUrl}]
+const hotel   = ref(null)
+const gallery = ref(null)
+const offers  = ref([])
 const nights  = ref(1)
 const loading = ref(false)
-const wishedIds = ref(new Set())
+const wishedIds = ref(new Set()) // 객실 카드용 로컬 토글
 
 // 날짜/인원 (URL 쿼리와 동기화)
 const ci = ref(route.query.checkIn || '')
@@ -246,7 +256,7 @@ const startingFromPerNight = computed(() => {
   return Math.floor(minTotal / nights.value)
 })
 
-// ===== 갤러리 데이터 구성 (호텔별 시드로 12장 랜덤) =====
+// ===== 갤러리 데이터 구성 =====
 function seedFromHotel(h) {
   const id = Number(h?.id ?? 777)
   let s = (id * 9301 + 49297) % 233280
@@ -260,7 +270,6 @@ function shuffleSeeded(arr, rnd) {
   }
   return a
 }
-
 const roomThumbsRaw = computed(() =>
   (gallery.value?.roomDefaults || []).map(img =>
     safeImg(typeof img === 'string' ? img : img.url)
@@ -268,7 +277,7 @@ const roomThumbsRaw = computed(() =>
 )
 const roomThumbs = computed(() => shuffleSeeded(roomThumbsRaw.value, seedFromHotel(hotel.value)))
 
-// Slide 1: 메인 + 4장, Slide 2: 8장 (총 12장)
+// Slide 1: 메인 + 4장, Slide 2: 8장
 function padN(arr, n) { const v = [...arr]; while (v.length < n) v.push(PLACEHOLDER); return v.slice(0, n) }
 const firstFour   = computed(() => padN(roomThumbs.value.slice(0, 4), 4))
 const secondEight = computed(() => padN(roomThumbs.value.slice(4, 12), 8))
@@ -286,9 +295,9 @@ function nextPage(){ pageIndex.value = (pageIndex.value + 1) % pageCount }
 function prevPage(){ pageIndex.value = (pageIndex.value - 1 + pageCount) % pageCount }
 function goPage(i){ if (i>=0 && i<pageCount) pageIndex.value = i }
 
-// 위시
-const isWished = (id) => wishedIds.value.has(id)
-function toggleWish(id) { isWished(id) ? wishedIds.value.delete(id) : wishedIds.value.add(id) }
+// 객실 로컬 찜(기존 유지)
+const isWishedRoom = (id) => wishedIds.value.has(id)
+function toggleWishRoom(id) { isWishedRoom(id) ? wishedIds.value.delete(id) : wishedIds.value.add(id) }
 
 // 날짜/인원 유효성 + 쿼리 적용
 const isValidRange = computed(() => ci.value && co.value && new Date(co.value) > new Date(ci.value))
@@ -297,20 +306,39 @@ function applyQuery() {
   router.replace({
     name: 'hotel-detail',
     params: { id: route.params.id },
-    query: { ...route.query, checkIn: ci.value, checkOut: co.value, guests: guests.value }
+    query: {
+      ...route.query,
+      checkIn: ci.value,
+      checkOut: co.value,
+      guests: Number(guests.value || 1), // ★ 항상 포함
+    }
   })
 }
 
-// 재조회
+// 재조회 (백엔드 시그니처에 맞게 항상 guests 전달)
 async function refetch() {
   loading.value = true
   try {
+    const toISODate = (d) => {
+      if (!d) return null
+      const x = new Date(String(d))
+      return Number.isNaN(x.getTime()) ? null : x.toISOString().slice(0, 10)
+    }
+
+    const ciSafe = toISODate(ci.value)
+    const coSafe = toISODate(co.value)
+    const gSafe  = Number(guests.value || 1)
+
+    if (!ciSafe || !coSafe) throw new Error('날짜가 비어 있습니다.')
+    if (!(new Date(coSafe) > new Date(ciSafe))) throw new Error('체크아웃은 체크인 이후여야 합니다.')
+
     const id = Number(route.params.id)
-    const res = await getHotelDetail(id, ci.value, co.value, guests.value)
+    const res = await getHotelDetail(id, ciSafe, coSafe, gSafe)
+
     hotel.value   = res.hotel
     gallery.value = res.gallery
     offers.value  = res.roomTypes || []
-    nights.value  = offers.value[0]?.nights || diffDays(ci.value, co.value) || 1
+    nights.value  = offers.value[0]?.nights || diffDays(ciSafe, coSafe) || 1
     pageIndex.value = 0
   } catch (e) {
     console.error(e)
@@ -318,10 +346,32 @@ async function refetch() {
     loading.value = false
   }
 }
+
 function diffDays(a, b) {
   if (!a || !b) return 0
   const d1 = new Date(a), d2 = new Date(b)
   return Math.max(0, Math.round((+d2 - +d1) / 86400000))
+}
+
+// ✅ 호텔 단위 위시 상태(서버 캐시 기반)
+const hotelWished = computed(() => {
+  const id = hotel.value?.id
+  return id ? isWished(id) : false
+})
+
+async function onToggleHotelWish(){
+  const id = hotel.value?.id
+  if (!id) return
+  if (!isLoggedIn()) {
+    return router.push({ path: '/login', query: { redirect: route.fullPath } })
+  }
+  try {
+    await toggleWishlist(id)
+    // 서버/캐시가 반영되면 hotelWished 가 자동으로 바뀜
+  } catch (e) {
+    console.error(e)
+    alert('찜하기 처리 중 문제가 발생했어요.')
+  }
 }
 
 // 라우트 쿼리 변경 감지 → 재조회
@@ -333,7 +383,10 @@ watch(() => route.query, () => {
 })
 
 // 최초 로드
-onMounted(() => { refetch() })
+onMounted(() => {
+  ensureWishlistLoaded()   // ✅ 위시리스트 초기 로드
+  refetch()
+})
 </script>
 
 <style scoped>

@@ -1,12 +1,13 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { addWishlist, removeWishlist } from '@/api/auth'  // ✅ 위시 API 사용
+import { computed, onMounted } from 'vue'                     // ✨ onMounted 추가
+import { useRouter, useRoute } from 'vue-router'              // ✨ 로그인 리다이렉트용
+
+// ✨ 위시 API 추가
+import { ensureWishlistLoaded, isWished, toggleWishlist } from '@/api/wishlistApi'
 
 const props = defineProps({
   hotel: { type: Object, required: true },
 })
-const router = useRouter()
 
 // 대표 이미지(없으면 placeholder)
 const cover = computed(() =>
@@ -27,31 +28,25 @@ const locationText = computed(() =>
   [props.hotel.region, props.hotel.address].filter(Boolean).join(' · ')
 )
 
-// ✅ 찜 상태/액션 (디자인 변경 없이 기능만 추가)
-const wished = ref(!!props.hotel.wished)
-const saving = ref(false)
+// ✨ 최초 한 번 위시 로드(중복 호출 무해)
+onMounted(() => ensureWishlistLoaded())
 
-async function toggleWish () {
-  if (saving.value) return
-  saving.value = true
+// ✨ 하트 상태
+const wished = computed(() => isWished(props.hotel?.id))
+
+// ✨ 하트 클릭 핸들러
+const router = useRouter()
+const route = useRoute()
+async function onToggleWish() {
   try {
-    if (!wished.value) {
-      await addWishlist(props.hotel.id)        // POST /api/my/wishlist {hotelId}
-      wished.value = true
-    } else {
-      await removeWishlist(props.hotel.id)     // DELETE /api/my/wishlist/:id
-      wished.value = false
-    }
+    await toggleWishlist(props.hotel.id)
   } catch (e) {
-    // 인증 필요 시 로그인으로
-    if (e?.response?.status === 401) {
-      router.push({ path: '/login', query: { redirect: location.pathname + location.search } })
+    if (e?.code === 'AUTH_REQUIRED') {
+      router.push({ path: '/login', query: { redirect: route.fullPath } })
     } else {
       console.error(e)
-      alert('잠시 후 다시 시도해 주세요.')
+      alert('찜하기 처리 중 오류가 발생했어요.')
     }
-  } finally {
-    saving.value = false
   }
 }
 </script>
@@ -60,8 +55,7 @@ async function toggleWish () {
   <article class="hl-item">
     <!-- 좌측 썸네일 -->
     <router-link :to="`/hotels/${hotel.id}`" class="thumb">
-      <!-- ✅ cover 사용 (기존 fallback 식별자 오류 수정) -->
-      <img :src="cover" :alt="hotel.name" />
+      <img :src="hotel.coverImageUrl || fallback" :alt="hotel.name" />
     </router-link>
 
     <!-- 중앙 정보 -->
@@ -84,14 +78,14 @@ async function toggleWish () {
       </div>
 
       <div class="actions">
-        <!-- ✅ 기능만 추가: 클릭하면 위시 토글 / 저장중 비활성화 -->
+        <!-- 기존 버튼 유지 + 상태/클릭만 연결 -->
         <button
           class="btn ghost"
-          :disabled="saving"
           :aria-pressed="wished"
-          @click.stop.prevent="toggleWish"
+          @click="onToggleWish"
         >
-          ♡ 찜하기
+          <span v-if="wished">♥ 찜해제</span>
+          <span v-else>♡ 찜하기</span>
         </button>
       </div>
     </div>

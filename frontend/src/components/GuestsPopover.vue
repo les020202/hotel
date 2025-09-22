@@ -1,27 +1,49 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 
+// v-model:adults / v-model:children 과 호환되는 prop 이름 사용
 const props = defineProps({
   open: { type: Boolean, default: false },
-  modelValueAdults: { type: Number, default: 2 },   // v-model:adults
-  modelValueChildren: { type: Number, default: 0 }, // v-model:children
-  minAdults: { type: Number, default: 1 },
-  maxAdults: { type: Number, default: 8 },
+
+  // v-model 대상
+  adults:   { type: Number, default: 2 },
+  children: { type: Number, default: 0 },
+
+  // (하위호환) 혹시 기존 이름으로 전달되면 우선 사용
+  modelValueAdults:   { type: Number, default: undefined },
+  modelValueChildren: { type: Number, default: undefined },
+
+  minAdults:   { type: Number, default: 1 },
+  maxAdults:   { type: Number, default: 8 },
   maxChildren: { type: Number, default: 8 },
-  childHint: { type: String, default: "어린이는 2명까지 무료입니다." },
-  childAgeLabel: { type: String, default: "0 - 7세" }
+  childHint:      { type: String, default: "어린이는 2명까지 무료입니다." },
+  childAgeLabel:  { type: String, default: "0 - 7세" },
 });
+
 const emit = defineEmits(["update:adults","update:children","close","confirm"]);
 
-const adults = ref(props.modelValueAdults);
-const children = ref(props.modelValueChildren);
+// 초기값: 새 이름 우선, 없으면 구 이름 사용
+const adults   = ref(
+  Number.isFinite(props.adults) ? props.adults
+  : Number.isFinite(props.modelValueAdults) ? props.modelValueAdults
+  : 2
+);
+const children = ref(
+  Number.isFinite(props.children) ? props.children
+  : Number.isFinite(props.modelValueChildren) ? props.modelValueChildren
+  : 0
+);
 
-function incA(){ if (adults.value < props.maxAdults) { adults.value++; emit("update:adults", adults.value);} }
-function decA(){ if (adults.value > props.minAdults){ adults.value--; emit("update:adults", adults.value);} }
-function incC(){ if (children.value < props.maxChildren){ children.value++; emit("update:children", children.value);} }
-function decC(){ if (children.value > 0){ children.value--; emit("update:children", children.value);} }
+// 부모에서 값이 바뀌면 동기화
+watch(() => props.adults,   v => { if (Number.isFinite(v)) adults.value = v; });
+watch(() => props.children, v => { if (Number.isFinite(v)) children.value = v; });
 
-function onKey(e){ if (e.key==="Escape") emit("close"); }
+function incA(){ if (adults.value   < props.maxAdults)   { adults.value++;   emit("update:adults", adults.value);   } }
+function decA(){ if (adults.value   > props.minAdults)   { adults.value--;   emit("update:adults", adults.value);   } }
+function incC(){ if (children.value < props.maxChildren) { children.value++; emit("update:children", children.value); } }
+function decC(){ if (children.value > 0)                  { children.value--; emit("update:children", children.value); } }
+
+function onKey(e){ if (e.key === "Escape") emit("close"); }
 onMounted(()=> document.addEventListener("keydown", onKey));
 onBeforeUnmount(()=> document.removeEventListener("keydown", onKey));
 </script>
@@ -37,7 +59,7 @@ onBeforeUnmount(()=> document.removeEventListener("keydown", onKey));
             <div class="sub">18세 이상</div>
           </div>
           <div class="ctrl">
-            <button class="btn" :disabled="adults<=1" @click="decA">−</button>
+            <button class="btn" :disabled="adults<=minAdults" @click="decA">−</button>
             <span class="num">{{ adults }}</span>
             <button class="btn" :disabled="adults>=maxAdults" @click="incA">+</button>
           </div>
@@ -56,7 +78,6 @@ onBeforeUnmount(()=> document.removeEventListener("keydown", onKey));
           </div>
         </div>
 
-        <!-- 정책 안내 -->
         <p class="policy">{{ childHint }}</p>
 
         <div class="actions">

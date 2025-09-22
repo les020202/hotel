@@ -13,7 +13,7 @@
           <option v-for="r in regions" :key="r" :value="r">{{ r }}</option>
         </select>
 
-        <!-- 인원 -->
+        <!-- 인원(드롭다운은 최종 guests 수를 선택) -->
         <select v-model.number="guests" class="border rounded px-3 py-2">
           <option v-for="n in 6" :key="n" :value="n">{{ n }}명</option>
         </select>
@@ -42,6 +42,8 @@
         :check-in="checkIn"
         :check-out="checkOut"
         :guests="guests"
+        :is-wished-fn="isWished"
+        @toggle-wish="onToggleWish"
       />
 
       <!-- 더보기 -->
@@ -68,6 +70,10 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import HotelList from '@/components/HotelList.vue'
 import { fetchHotels } from '@/api/searchApi.js'
+
+/* ✅ 위시리스트 + 인증 */
+import { ensureWishlistLoaded, isWished, toggleWishlist } from '@/api/wishlistApi'
+import { isLoggedIn } from '@/api/auth'
 
 /** 프론트 약칭 → 백엔드(DB) 정식 값 매핑 */
 const REGION_ALIAS = {
@@ -129,7 +135,7 @@ async function loadPage(offset = 0, append = false) {
       region: regionForApi.value,  // ← 매핑된 값으로 호출
       limit,
       offset,
-      guests: guests.value,
+      guests: guests.value,        // ← guests 그대로 전달(성인+유료아동)
     })
     if (append) items.value.push(...res.items)
     else items.value = res.items
@@ -154,7 +160,7 @@ function syncFromRoute() {
   if (q.checkOut) checkOut.value = q.checkOut
   region.value = q.region ?? null
   regionExact.value = q.regionExact === 'true'   // 카드 클릭이면 true
-  guests.value = Number(q.guests || 1)
+  guests.value = Number(q.guests || 1)           // ← billableGuests 결과를 받음
 }
 
 function onSearch() {
@@ -164,9 +170,28 @@ function onSearch() {
   router.replace({ name: 'search', query: q }).finally(reload)
 }
 
+/* ✅ 검색 결과에서 하트 클릭 시 처리 */
+async function onToggleWish(hotelId){
+  if (!isLoggedIn()) {
+    // 로그인 필요 → 현재 위치로 되돌아오도록 redirect 포함
+    return router.push({ path: '/login', query: { redirect: route.fullPath } })
+  }
+  try {
+    await toggleWishlist(hotelId)   // 서버 토글
+    // 내부 캐시를 쓰는 구현이라면 여기서 리스트 UI가 즉시 반영됨
+  } catch (e) {
+    console.error(e)
+    alert('찜하기 처리 중 문제가 발생했어요.')
+  }
+}
+
 watch(() => route.query, () => { syncFromRoute(); reload() })
 
-onMounted(() => { syncFromRoute(); loadPage(0, false) })
+onMounted(() => {
+  ensureWishlistLoaded()             // ✅ 위시리스트 초기 로드(있으면 즉시 반영)
+  syncFromRoute()
+  loadPage(0, false)
+})
 </script>
 
 <style scoped>

@@ -1,10 +1,11 @@
 <script setup>
 import { ref, reactive, computed, nextTick, watch } from "vue";
+import { useRouter } from "vue-router";
 import DestinationInput from "@/components/DestinationInput.vue";
 import RangeCalendar from "@/components/RangeCalendar.vue";
 import GuestsPopover from "@/components/GuestsPopover.vue";
 
-/* ✅ q 와 region 둘 다 받도록 (부모가 어느 키로 보내도 OK) */
+/* 기존 + rooms/autoNavigate 추가(rooms는 경고 방지/하위호환용) */
 const props = defineProps({
   q:        { type: String, default: "" },
   region:   { type: String, default: null },
@@ -12,28 +13,33 @@ const props = defineProps({
   checkOut: { type: String, default: null },
   adults:   { type: Number, default: 2 },
   children: { type: Number, default: 0 },
+  rooms:    { type: Number, default: 1 },         // 하위호환: 메인에서 v-model:rooms를 사용
+  autoNavigate: { type: Boolean, default: true }, // 검색 버튼 클릭 시 /search로 자동 이동
 });
 
-const emit = defineEmits(["submit", "changed"]);
+const emit = defineEmits(["submit", "search", "changed"]);
+const router = useRouter();
 
 /* ✅ 들어온 텍스트의 단일 진실 */
 const incomingQ = computed(() => props.q ?? props.region ?? "");
 
-/* 내부 상태 */
+/* 내부 상태 (Number 캐스팅으로 NaN 방지) */
 const q        = ref(incomingQ.value);
 const checkIn  = ref(props.checkIn);
 const checkOut = ref(props.checkOut);
-const adults   = ref(props.adults);
-const children = ref(props.children);
+const adults   = ref(Number(props.adults ?? 2));
+const children = ref(Number(props.children ?? 0));
+const rooms    = ref(Number(props.rooms ?? 1));
 
-/* ✅ prop → state 동기화 (비동기 프리필 대응) */
+/* prop → state 동기화 (비동기 프리필 대응) */
 watch(incomingQ, v => { if (v != null && v !== q.value) q.value = v; });
 watch(() => props.checkIn,  v => { if (v !== checkIn.value)  checkIn.value  = v; });
 watch(() => props.checkOut, v => { if (v !== checkOut.value) checkOut.value = v; });
-watch(() => props.adults,   v => { if (v !== adults.value)   adults.value   = v; });
-watch(() => props.children, v => { if (v !== children.value) children.value = v; });
+watch(() => props.adults,   v => { if (v != null) adults.value   = Number(v); });
+watch(() => props.children, v => { if (v != null) children.value = Number(v); });
+watch(() => props.rooms,    v => { if (v != null) rooms.value    = Number(v); });
 
-/* ✅ 열림 상태는 reactive + 전용 setter로만 갱신 (객체 통째 대입 금지) */
+/* 열림 상태는 reactive + 전용 setter */
 const open = reactive({ dest:false, dates:false, guests:false });
 function setOpen(which /** 'dest'|'dates'|'guests'|null */) {
   open.dest = open.dates = open.guests = false;
@@ -43,15 +49,36 @@ function setOpen(which /** 'dest'|'dates'|'guests'|null */) {
 /* 진행 단계(옵션) */
 const step = ref("dest"); // dest -> dates -> guests -> done
 
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+// 유아 2명까지 무료 → 과금 인원 계산
+const billableGuests = (ad, ch) => {
+  const A = Number(ad) || 0;   // 성인
+  const C = Number(ch) || 0;   // 아동(유아)
+  return A + Math.max(C - 2, 0);
+};
 
-function payload(){
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function addDays(dateISO, n) {
+  const d = new Date(dateISO);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function ensureDates(ci, co){
+  const today = todayISO();
+  const start = ci || today;
+  const end   = (co && new Date(co) > new Date(start)) ? co : addDays(start, 1);
+  return { start, end };
+}
+
+function payload() {
   return {
     q: q.value,
     checkIn: checkIn.value,
     checkOut: checkOut.value,
-    adults: adults.value,
-    children: children.value
+    adults: Number(adults.value || 0),
+    children: Number(children.value || 0),
+    rooms: Number(rooms.value || 1),
+    // 백엔드가 실제로 사용하는 인원 수
+    guests: billableGuests(adults.value, children.value),
   };
 }
 
@@ -83,9 +110,60 @@ function onGuestsConfirm(){
   emit("changed", payload());             // 상태만 알림
 }
 
+/** 👉 /search 쿼리 구성 (백엔드/프론트 모두 호환) */
+function buildQuery() {
+  const { start, end } = ensureDates(checkIn.value, checkOut.value);
+
+  // guests는 아동 2명 무료 규칙을 적용한 값
+  const guests = billableGuests(adults.value, children.value);
+
+  // region은 검색어 기반으로도 들어올 수 있으므로 최대한 유지
+  const region = (props.region ?? q.value ?? '').trim() || null;
+
+  const query = {
+    // 프론트 검색 페이지에서도 사용하는 키 유지
+    q: q.value || region || '',
+    checkIn: start,
+    checkOut: end,
+
+    // 표시/유지용
+    adults: Number(adults.value || 0),
+    children: Number(children.value || 0),
+    rooms: Number(rooms.value || 1),
+
+    // 백엔드 시그니처
+    region,
+    guests, // ★ 핵심
+  };
+
+  // 빈 값 정리
+  Object.keys(query).forEach(k => {
+    if (query[k] === null || query[k] === undefined || query[k] === '') delete query[k];
+  });
+  return query;
+}
+
 // CTA 클릭할 때만 검색 실행
-function onClickSearch(){
-  emit("submit", payload());
+async function onClickSearch(){
+  const query = buildQuery();
+
+  // 1) 항상 외부에 알림 (하위호환 위해 두 이벤트 모두 발행)
+  const data = { ...payload(), ...query };
+  emit("submit", data);
+  emit("search", data);
+
+  // 2) autoNavigate가 true 면 컴포넌트 자체가 /search 로 라우팅
+  if (props.autoNavigate) {
+    await router.push({ name: 'search', query });
+  }
+}
+
+/* Enter 키로도 검색 */
+function onKeydown(e){
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    onClickSearch();
+  }
 }
 
 const dateLabel = computed(() => {
@@ -100,7 +178,7 @@ const peopleLabel = computed(() => `성인 ${adults.value}명 · 아동 ${childr
 </script>
 
 <template>
-  <div class="bar">
+  <div class="bar" @keydown="onKeydown">
     <!-- 1) 목적지 / 호텔 -->
     <div class="cell cell--wide" @click="focusDest">
       <DestinationInput
@@ -150,7 +228,7 @@ const peopleLabel = computed(() => `성인 ${adults.value}명 · 아동 ${childr
     </div>
 
     <!-- CTA -->
-    <button class="cta" @click="onClickSearch">검색하기</button>
+    <button type="button" class="cta" @click="onClickSearch">검색하기</button>
   </div>
 </template>
 
