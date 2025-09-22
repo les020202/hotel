@@ -2,6 +2,10 @@ package com.example.hotelres.coupon;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import com.example.hotelres.admin.coupon.Coupon;
+import com.example.hotelres.admin.coupon.CouponRepository;
+
 import java.util.List;
 
 /*

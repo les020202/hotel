@@ -26,7 +26,7 @@ public class Faq {
   // FAQ 질문 (200자 제한)
 
   @Lob 
-  @Column(nullable=false)
+  @Column(nullable = false, columnDefinition = "TEXT")
   private String answer; 
   // FAQ 답변 (큰 텍스트 저장 가능, CLOB)
 

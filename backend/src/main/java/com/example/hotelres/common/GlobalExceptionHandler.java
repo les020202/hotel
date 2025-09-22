@@ -1,30 +1,58 @@
-package com.example.hotelres.common;  
-// 공통 기능 패키지
+// src/main/java/com/example/hotelres/common/GlobalExceptionHandler.java
+package com.example.hotelres.common;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-// 예외 처리용 스프링 어노테이션 및 클래스들
 
 import java.util.HashMap;
 import java.util.Map;
-// 에러 메시지를 담을 Map
 
-@RestControllerAdvice
-// 모든 REST 컨트롤러 전역에서 발생하는 예외를 처리하는 어노테이션
+@RestControllerAdvice // 전체 REST 컨트롤러 전역 예외 처리
 public class GlobalExceptionHandler {
 
-  // ===== 입력값 검증 실패 예외 처리 =====
-  @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
-    Map<String, String> errors = new HashMap<>(); // 에러 메시지 담을 Map
+    // ===== 1) 입력값 검증 실패 (Bean Validation) =====
+    // 프론트에서 필드별 에러 메시지 맵을 그대로 쓰기 좋도록 field->message 형태로 반환
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors()
+                .forEach(e -> errors.put(e.getField(), e.getDefaultMessage()));
+        return ResponseEntity.badRequest().body(errors); // 400
+    }
 
-    ex.getBindingResult().getFieldErrors()
-      .forEach(e -> errors.put(e.getField(), e.getDefaultMessage()));
-      // 유효성 검증 실패한 필드명과 메시지를 Map에 저장
+    // ===== 2) 데이터 무결성 위반(중복 키 등) =====
+    // 제약조건명으로 상세 메시지 분기
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicate(DataIntegrityViolationException e) {
+        String msg = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : "";
+        String friendly;
+        if (msg.contains("uk_users_login")) {
+            friendly = "이미 사용 중인 아이디입니다.";
+        } else if (msg.contains("uk_users_email")) {
+            friendly = "이미 등록된 이메일입니다.";
+        } else {
+            friendly = "중복 데이터 오류";
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT) // 409
+                .body(Map.of("error", friendly));
+    }
 
-    return ResponseEntity.badRequest().body(errors);
-    // HTTP 400 응답과 함께 에러 메시지 반환
-  }
+    // ===== 3) 잘못된 요청 파라미터/상태 =====
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegal(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST) // 400
+                .body(Map.of("error", e.getMessage()));
+    }
+
+    // ===== 4) 그 외 모든 예외(안전망) =====
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleGeneric(Exception e) {
+        e.printStackTrace(); // 로그 확인용
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR) // 500
+                .body(Map.of("error", "서버 오류: " + e.getClass().getSimpleName()));
+    }
 }

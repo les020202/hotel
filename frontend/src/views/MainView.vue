@@ -17,7 +17,6 @@ async function fetchMe () {
 }
 
 onMounted(async () => {
-
   // 1) 소셜 로그인 성공 시 /main#token=... 으로 오므로, 해시에서 토큰 추출
   const m = location.hash.match(/token=([^&]+)/)
   if (m) {
@@ -27,7 +26,6 @@ onMounted(async () => {
   }
 
   // 2) 저장된 토큰이 전혀 없으면 로그인 페이지로
-
   if (!localStorage.getItem('token')) {
     router.push('/login')
     return
@@ -38,8 +36,6 @@ onMounted(async () => {
 })
 
 async function checkToken () { await fetchMe() }
-
-
 /* =============================
  * 로그아웃: 서버 쿠키 제거 → 로컬 정리 → 하드 리다이렉트
  * ============================= */
@@ -69,6 +65,14 @@ async function logout () {
       router.push('/mypage')
 }
 
+
+
+
+/* ✅ 예약 페이지로 이동 */
+function goReservation () {
+  router.push('/reservation')
+}
+
 </script>
 
 <template>
@@ -83,6 +87,8 @@ async function logout () {
         <button class="btn primary" @click="checkToken">토큰 확인(/api/me)</button>
         <button class="btn" @click="goMyPage">마이페이지로 이동</button> <!-- ✅ 추가 -->
         <button class="btn" @click="logout">로그아웃</button>
+        <!-- ✅ 예약하기 버튼 -->
+        <button class="btn success" @click="goReservation">예약하기</button>
       </div>
 
       <p class="hint" v-if="msg">{{ msg }}</p>
@@ -90,16 +96,16 @@ async function logout () {
     </div>
   </div>
 </template>
-
-
 <style scoped>
 .page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0b0c}
-.card{width:100%;max-width:1440px;background:#111318;border:1px solid #24262b;border-radius:16px;padding:28px}
+.card{width:100%;max-width:720px;background:#111318;border:1px solid #24262b;border-radius:16px;padding:28px}
+
 .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .title{font-size:22px;font-weight:800;color:#e5e7eb}
 .greet{color:#cbd5e1}
 .row{display:flex;align-items:center}.gap{gap:10px}
 .btn{padding:.65rem 1rem;border:1px solid #30343a;border-radius:10px;background:#171a1f;color:#e5e7eb;cursor:pointer}
 .btn.primary{background:#6b46c1;border-color:#6b46c1}
+.btn.success{background:#22c55e;border-color:#22c55e;color:#fff} /* ✅ 예약하기 스타일 */
 .hint{color:#cbd5e1}.mt{margin-top:12px}
 </style>

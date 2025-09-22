@@ -3,6 +3,7 @@ package com.example.hotelres.user;
 // 사용자(User) 관련 패키지
 
 
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import lombok.Getter;
@@ -13,6 +14,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
 
 
 @Entity
@@ -42,12 +44,9 @@ public class User {
 
     // 커버 기본 이미지 템플릿
     public enum CoverTpl { C1, C2, C3 }
-
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     // PK, AUTO_INCREMENT
 
     @Column(nullable = false, length = 191, unique = true)
@@ -125,5 +124,6 @@ public class User {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt; // 수정일 자동 기록
+
 
 }

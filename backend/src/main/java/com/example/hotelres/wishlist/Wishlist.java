@@ -1,7 +1,7 @@
 // src/main/java/com/example/hotelres/wishlist/Wishlist.java
 package com.example.hotelres.wishlist;
 
-import com.example.hotelres.hotel.Hotel;       // ✅ DTO 아님! 실제 Hotel 엔티티를 참조
+import com.example.hotelres.admin.hotel.Hotel;       // ✅ DTO 아님! 실제 Hotel 엔티티를 참조
 import com.example.hotelres.user.User;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

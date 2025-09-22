@@ -1,6 +1,5 @@
 package com.example.hotelres.user;
 
-
 // 이메일 인증 코드 저장/검증을 위한 컴포넌트
 
 import com.example.hotelres.auth.EmailCodeStore;
@@ -14,11 +13,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.UserDetails;
-
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-
 
 /**
  * UserController

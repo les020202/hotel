@@ -31,6 +31,7 @@ import java.util.Map;
 import org.springframework.http.HttpMethod;
 
 
+
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
@@ -64,56 +65,55 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                .authorizeHttpRequests(auth -> auth
-                        // ✅ 프리플라이트 허용
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // ✅ 공개 엔드포인트
-                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/search/**", "/api/hotels/**").permitAll()
-                        // (선택) 정적/헬스체크
-                        .requestMatchers("/", "/index.html", "/favicon.ico", "/assets/**",
-                                "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health").permitAll()
-                        .requestMatchers("/error", "/error/**").permitAll()
-                        .requestMatchers("/files/**").permitAll()
-                        .requestMatchers("/api/amenities/**").permitAll()   // ← 추가
-                        .requestMatchers("/api/search/**").permitAll()
-
-                        // 나머지는 인증 필요
-                        .anyRequest().authenticated()
-                )
-
-                // 기본 폼/Basic 비활성
+            // ★ 여기만 바꿈: STATELESS → IF_REQUIRED
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            .authorizeHttpRequests(auth -> auth
+                // 공개 엔드포인트 (퍼미션이 필요 없는 경로들)
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // 프리플라이트 요청 허용
+                .requestMatchers("/confirm", "/pay/**", "/oauth2/**", "/login/oauth2/**", "/api/auth/**")
+                .permitAll() // 로그인, 인증 관련
+                .requestMatchers("/", "/index.html", "/favicon.ico", "/assets/**", 
+                    "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health", 
+                    "/error", "/error/**", "/files/**", "/api/amenities/**", "/api/search/**")
+                .permitAll() // 정적 파일, 헬스 체크 및 API 문서
+                // 사용자 요청
+                .requestMatchers(HttpMethod.POST, "/api/hotel-applications").hasRole("USER")
+                // 관리자 요청
+                .requestMatchers("/api/admin/hotel-applications/**", "/api/admin/**").hasRole("ADMIN")
+                // 공개된 호텔 검색 API
+                .requestMatchers(HttpMethod.GET, "/api/hotels/**", "/api/search/**").permitAll()
+                // 기본적으로 모든 다른 요청은 인증 필요
+                .anyRequest().authenticated()
+            )
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
-            // 인증 안됨 → 401
             .exceptionHandling(e -> e.authenticationEntryPoint(
                 (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             ))
             .oauth2Login(oauth -> oauth
                 .authorizationEndpoint(ep -> ep
                     .baseUri("/oauth2/authorization")
-                    // ★ 소셜 재인증 강제 파라미터 주입
-                    .authorizationRequestResolver(
-                        customAuthorizationRequestResolver(clientRegistrationRepository)
-                    )
+                    // ★ 세션 기반 AuthorizationRequest 저장소 명시
+                    .authorizationRequestRepository(new org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository())
+                    .authorizationRequestResolver(customAuthorizationRequestResolver(clientRegistrationRepository))
                 )
+                // ★ 콜백 baseUri 명시 (provider 콘솔과 완전히 동일해야 함)
+                .redirectionEndpoint(re -> re.baseUri("/login/oauth2/code/*"))
                 .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
                 .successHandler(oAuth2SuccessHandler)
                 .failureHandler((req, res, ex) -> {
-                    String target = "http://localhost:5173/login?social_error=" +
-                            URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
-                                    StandardCharsets.UTF_8);
+                    String origin = req.getHeader("Origin");
+                    if (origin == null || origin.isBlank()) origin = "http://localhost:5173"; //http://172.16.15.53:5173
+                    String target = origin + "/login?social_error=" +
+                        java.net.URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
+                            java.nio.charset.StandardCharsets.UTF_8);
                     res.setStatus(302);
                     res.sendRedirect(target);
                 })
             )
             .logout(l -> l
                 .logoutUrl("/logout")
-                .deleteCookies("JSESSIONID", "refreshToken") // 서버 세션/리프레시 쿠키 제거
+                .deleteCookies("JSESSIONID", "refreshToken")
                 .invalidateHttpSession(true)
                 .clearAuthentication(true)
                 .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
@@ -167,7 +167,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         var cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("http://localhost:5173", "http://172.16.15.53:5173",  "http://127.0.0.1:5173"));
+        cfg.setAllowedOrigins(List.of(
+        	    "http://localhost:5173",
+        	    "http://127.0.0.1:5173",
+        	    "http://172.16.15.53:5173" // ★ 추가
+        	));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
