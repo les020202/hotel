@@ -9,7 +9,7 @@ const api = axios.create({
   withCredentials: true, // refresh token 등 쿠키 사용 시 필요
 })
 
-// === 공통 에러 메시지 추출기 ===
+// === 공통 에러 메시지 추출기 (기타 화면에서 쓸 수 있게 유지)
 function getErrorMessage(e) {
   const r = e?.response
   return (
@@ -41,10 +41,11 @@ api.interceptors.response.use(
     if (!response) return Promise.reject(err)
 
     const isAuthPath = config.url?.includes('/auth/')
+
+    // 401이고 /auth/ 가 아닌 API면 refresh 시도
     if (response.status === 401 && !config._retry && !isAuthPath) {
       config._retry = true
 
-      // 이미 다른 refresh가 진행 중이면 refresh 완료까지 대기
       if (isRefreshing) {
         return new Promise((resolve) => {
           addSubscriber((newToken) => {
@@ -54,7 +55,6 @@ api.interceptors.response.use(
         })
       }
 
-      // refresh 시도
       isRefreshing = true
       try {
         const { data } = await api.post('/auth/refresh')
@@ -68,14 +68,16 @@ api.interceptors.response.use(
         // refresh 실패 → 로그인 재유도
         localStorage.removeItem('token')
         router.push('/login')
-        return Promise.reject(new Error(getErrorMessage(e)))
+        // ⛔️ 래핑하지 말고 원본 에러 그대로 던진다
+        return Promise.reject(e)
       } finally {
         isRefreshing = false
       }
     }
 
-    // 그 외 에러는 메시지 정리해서 던짐
-    return Promise.reject(new Error(getErrorMessage(err)))
+    // ⛔️ 중요: /auth/ 포함 요청은 서버 JSON을 화면에 전달해야 하므로 래핑 금지
+    // 그 외도 원본 유지 (필요하면 화면에서 getErrorMessage로 변환)
+    return Promise.reject(err)
   }
 )
 
@@ -109,7 +111,12 @@ export const login = async (payload) => {
     const { data } = await api.post('/auth/login', payload)
     return data
   } catch (e) {
-    throw new Error(getErrorMessage(e))
+    // ⛔️ 서버가 내려준 JSON을 보존
+    if (e.response?.data) {
+      throw e.response.data
+    }
+    // 네트워크/예외 상황 최소 형태
+    throw { error: 'UNKNOWN', attempts: 0, locked: false }
   }
 }
 

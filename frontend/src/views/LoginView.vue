@@ -36,36 +36,36 @@ function getRoleFromPayload (user) {
   return null
 }
 
-
 onMounted(() => {
   const saved = localStorage.getItem('remember_login_id')
   if (saved) { loginId.value = saved; rememberId.value = true }
 })
 
 async function onLogin() {
-  msg.value = '';
-  loading.value = true;
+  msg.value = ''
+  loading.value = true
   try {
-    const { token } = await login({ loginId: loginId.value, password: password.value });
+    const { token } = await login({ loginId: loginId.value, password: password.value })
     if (rememberId.value) localStorage.setItem('remember_login_id', loginId.value)
-    if (rememberId.value) localStorage.setItem('remember_login_id', loginId.value)
+
     const role = getRoleFromPayload(parseJwt(token))
-    localStorage.setItem('token', token);
+    localStorage.setItem('token', token)
     router.push(role === 'ROLE_ADMIN' ? '/admin' : '/main')
   } catch (e) {
-    const err = e?.response?.data?.error;
-    const attempts = e?.response?.data?.attempts ?? 0; // 서버에서 온 실패 횟수
-    const locked   = e?.response?.data?.locked ?? false;
+    // ⛔️ 인터셉터 & login()에서 서버 JSON을 그대로 던지므로 여기서 바로 구조분해
+    const { error, attempts = 0, locked = false } = e || {}
 
     if (locked) {
-      msg.value = '계정이 잠겼습니다. 1시간 후에 다시 시도해주세요.';
-    } else if (err === 'INVALID_CREDENTIALS') {
-      msg.value = `아이디 또는 비밀번호가 올바르지 않습니다. (틀린 횟수: ${attempts})`;
+      msg.value = '계정이 잠겼습니다. 1시간 후에 다시 시도해주세요.'
+    } else if (error === 'INVALID_CREDENTIALS') {
+      msg.value = `아이디 또는 비밀번호가 올바르지 않습니다. (틀린 횟수: ${attempts})`
+    } else if (typeof error === 'string' && error.length) {
+      msg.value = error
     } else {
-      msg.value = err || '로그인 실패';
+      msg.value = '로그인 실패'
     }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 </script>
@@ -121,8 +121,12 @@ async function onLogin() {
                 autocomplete="current-password"
                 required
               />
-  <button type="button" class="eye" @click="show = !show"
-                      :aria-label="show ? '비밀번호 숨기기' : '비밀번호 보기'">
+              <button
+                type="button"
+                class="eye"
+                @click="show = !show"
+                :aria-label="show ? '비밀번호 숨기기' : '비밀번호 보기'"
+              >
                 <svg viewBox="0 0 24 24" class="eye-ico" aria-hidden="true">
                   <path d="M1.5 12s3.5-6.5 10.5-6.5S22.5 12 22.5 12s-3.5 6.5-10.5 6.5S1.5 12 1.5 12Z"
                         fill="none" stroke="currentColor" stroke-width="1.6"/>
