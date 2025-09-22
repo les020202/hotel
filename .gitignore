@@ -1,3 +1,8 @@
 VITE_API_BASE=/api
 VITE_TOSS_CLIENT_KEY=test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm
 #test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm
+
+# 민감 설정 파일 제외
+.env
+backend/src/main/resources/application.properties
+backend/src/test/resources/application.properties
