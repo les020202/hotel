@@ -5,7 +5,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { cancelReservationHold, getAvailableCoupons, repriceReservationHold } from '@/api/reservation'
 import { loadPaymentWidget } from '@tosspayments/payment-widget-sdk'
-
+import api from '@/api/auth' 
 /* ---------------------- Routing & Query ---------------------- */
 const route  = useRoute()
 const router = useRouter()
@@ -15,7 +15,7 @@ const holdExpiresAt = ref(String(route.query.expiresAt || route.query.holdExpire
 const hotelId       = ref(route.query.hotelId ? Number(route.query.hotelId) : null)
 const roomTypeId    = ref(route.query.roomTypeId ? Number(route.query.roomTypeId) : null)
 const ratePlanId    = ref(route.query.ratePlanId ? Number(route.query.ratePlanId) : 1)
-const userId        = ref(route.query.userId ? Number(route.query.userId) : 1)
+const userId        = ref(route.query.userId ? Number(route.query.userId) : null)
 const guests        = ref(route.query.guests ? Number(route.query.guests) : 1)
 const checkIn       = ref(String(route.query.checkIn || ''))
 const checkOut      = ref(String(route.query.checkOut || ''))
@@ -152,8 +152,8 @@ const closeCouponModal = () => showCouponModal.value = false
 async function handleOpenCoupon() {
   try {
     couponsLoading.value = true
-    const uid = userId.value || 1
-    const { data } = await getAvailableCoupons(uid)
+    
+   const { data } = await getAvailableCoupons()  // JWT에서 userId 추출
     coupons.value = (data || []).map(c => ({
       code: c.code,
       name: c.title,
@@ -163,7 +163,10 @@ async function handleOpenCoupon() {
     }))
     showCouponModal.value = true
   } catch (e) {
-    console.error(e); toast('쿠폰 조회 실패')
+    const status = e?.response?.status
+   if (status === 401) toast('로그인 후 쿠폰을 사용할 수 있어요.')
+   else toast('쿠폰 조회 실패')
+   console.error(e)
   } finally {
     couponsLoading.value = false
   }
@@ -179,8 +182,8 @@ const applyCouponLocal = async (c) => {
 async function handleApplyCoupon(c) {
   if (!holdCode.value) return toast('홀드 정보가 없습니다.')
   try {
-    const uid = userId.value || 1
-    const { data } = await repriceReservationHold(holdCode.value, { userId: uid, couponCode: c?.code ?? null })
+    
+    const { data } = await repriceReservationHold(holdCode.value, {couponCode: c?.code ?? null })
     quotedTotal.value   = Number(data.totalAmount ?? data.quotedTotal ?? 0)
     holdExpiresAt.value = data.expiresAt
     selectedCoupon.value = c || null

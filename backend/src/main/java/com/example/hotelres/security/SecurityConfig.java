@@ -84,6 +84,7 @@ public class SecurityConfig {
                         .requestMatchers("/payments/toss/**").permitAll()
                         .requestMatchers("/api/reservations/hold/**").permitAll()   // 단건 조회는 누구나 가능
                         .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN") // 운영 전용은 잠그고
+                        .requestMatchers("/api/coupons/**").authenticated()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 )

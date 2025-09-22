@@ -6,10 +6,9 @@ export const getFeaturedHotel = (hotelId) =>
   hotelId ? api.get(`/hotels/${hotelId}/featured`) : api.get('/hotels/featured')
 
 /** ✅ 쿠폰 목록 (유저에게 발급/사용 가능) */
-export const getAvailableCoupons = (userId) => {
-  if (!userId) throw new Error('userId가 필요합니다.')
-  return api.get(`/coupons/available`, { params: { userId } })
-}
+export const getAvailableCoupons = () => {
+   return api.get(`/coupons/available`)
+ }
 
 /** 예약 홀드 생성 */
 export const createReservationHold = ({
