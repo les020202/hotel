@@ -1,4 +1,3 @@
-
 // frontend/src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import SignupView from '@/views/SignupView.vue'
@@ -23,12 +22,11 @@ import HotelDetailView from '@/views/HotelDetailView.vue'
 // 마이페이지 관련
 import MyPage from '@/views/mypage/MyPage.vue'
 import Account from '@/views/mypage/Account.vue'
-
 import Coupons from '@/views/mypage/Coupons.vue'
 import History from '@/views/mypage/History.vue'
 import Support from '@/views/mypage/Support.vue'
 
-// 고객지원 하위 라우트
+// 고객지원 퍼블릭(사용자용) 하위 라우트
 import NoticeList from '@/views/support/NoticeList.vue'
 import NoticeDetail from '@/views/support/NoticeDetail.vue'
 import FaqList from '@/views/support/FaqList.vue'
@@ -38,24 +36,28 @@ import SupportInquiry from '@/views/support/SupportInquiry.vue'
 import MyTickets from '@/views/support/MyTickets.vue'
 import MyTicketDetail from '@/views/support/MyTicketDetail.vue'
 
-//찜 관련
+// 찜
 import Wishlist from '@/views/Wishlist.vue'
 
 // (선택) 403 페이지
 const Forbidden = { template: '<div style="padding:2rem">권한이 없습니다 (403)</div>' }
 
-// === ⬇️ 오너 뷰 추가 (JS 버전) ===
+// === 오너 뷰 ===
 import OwnerLayout from '@/views/owner/OwnerLayout.vue'
 import OwnerDashboard from '@/views/owner/Dashboard.vue'
 import OwnerInventory from '@/views/owner/InventoryView.vue'
 import OwnerBookings from '@/views/owner/BookingsView.vue'
 
+// === 관리자 고객지원(공지/FAQ/문의) — lazy load 컴포넌트 ===
+const AdminSupportLayout  = () => import('@/views/admin/support/SupportLayout.vue')
+const AdminSupportNotices = () => import('@/views/admin/support/Notices.vue')
+const AdminSupportFaqs    = () => import('@/views/admin/support/Faqs.vue')
+const AdminSupportTickets = () => import('@/views/admin/support/Tickets.vue')
 
 // JWT payload 파서 (역할 확인용)
 function parseJwt(token) {
   try {
     if (!token) return null
-    // "Bearer ..." 접두사 제거
     if (token.startsWith('Bearer ')) token = token.slice(7)
     const base64Url = token.split('.')[1]
     if (!base64Url) return null
@@ -71,11 +73,7 @@ function parseJwt(token) {
 function hasOwnerRole(claims) {
   if (!claims) return false
   const bucket = []
-
-  // ✅ 단일 role 키 지원 (지금 네 토큰 구조)
   if (typeof claims.role === 'string') bucket.push(claims.role)
-
-  // 그 외 흔한 위치들
   if (Array.isArray(claims.roles)) bucket.push(...claims.roles)
   if (Array.isArray(claims.authorities)) bucket.push(...claims.authorities)
   if (Array.isArray(claims.scopes)) bucket.push(...claims.scopes)
@@ -83,8 +81,6 @@ function hasOwnerRole(claims) {
   if (typeof claims.authority === 'string') bucket.push(...claims.authority.split(/[ ,]/))
   if (claims.realm_access && Array.isArray(claims.realm_access.roles)) bucket.push(...claims.realm_access.roles)
   if (Array.isArray(claims['cognito:groups'])) bucket.push(...claims['cognito:groups'])
-
-  // 대소문자 무시 비교
   const norm = bucket.filter(Boolean).map(x => String(x).toUpperCase().trim())
   return norm.includes('ROLE_OWNER') || norm.includes('OWNER')
 }
@@ -117,11 +113,11 @@ const router = createRouter({
     // 예약 플로우
     { path: '/reservation', component: ReservationPage },
 
-    // ✅ 토스 결제 결과 콜백 라우트 (비로그인 접근 허용)
+    // 토스 결제 결과 콜백 (비로그인 허용)
     { path: '/pay/success', name: 'PaySuccess', component: PaymentSuccess },
     { path: '/pay/fail',    name: 'PayFail',    component: PaymentFail },
 
-    // ✅ 관리자 라우트 (ROLE_ADMIN 전용)
+    // 관리자 (ROLE_ADMIN)
     {
       path: '/admin',
       component: AdminLayout,
@@ -135,16 +131,27 @@ const router = createRouter({
         { path: 'coupons',     name: 'AdminCoupons',     component: () => import('@/views/admin/Coupons.vue'),            meta: { title: '쿠폰/프로모션' } },
         { path: 'users',       name: 'AdminUsers',       component: () => import('@/views/admin/Users.vue'),              meta: { title: '유저 관리' } },
 
-        // ✅ 추가: 호텔 관리 / 호텔 심사
+        // 호텔 관리 / 호텔 심사
         { path: 'hotels',       name: 'AdminHotels',      component: () => import('@/views/admin/AdminHotelManage.vue'), meta: { title: '호텔 관리' } },
         { path: 'hotel-audit',  name: 'AdminHotelAudit',  component: () => import('@/views/admin/AdminHotelAudit.vue'),  meta: { title: '호텔 심사' } },
+
+        // ✅ 관리자 고객지원 루트
+        { path: 'support',        component: () => import('@/views/admin/support/SupportLayout.vue') ,
+          children: [
+            { path: '', redirect: '/admin/support/notices' },
+            { path: 'notices',  component: () => import('@/views/admin/support/Notices.vue') },
+            { path: 'faqs',     component: () => import('@/views/admin/support/Faqs.vue') },
+            { path: 'tickets',  component: () => import('@/views/admin/support/Tickets.vue') },
+            { path: 'tickets/:id', component: () => import('@/views/admin/support/TicketDetail.vue'), props: true },
+          ]
+        },
       ]
     },
 
     { path: '/403', component: Forbidden },
     { path: '/:pathMatch(.*)*', redirect: '/main' },
 
-    // ✅ 마이페이지 라우트
+    // 마이페이지
     {
       path: '/mypage',
       component: MyPage,
@@ -158,19 +165,20 @@ const router = createRouter({
       ]
     },
 
-    // ✅ 고객지원 페이지 (로그인 없이도 접근 가능)
-    { path: '/support/notice', component: NoticeList },      
+    // 고객지원(퍼블릭)
+    { path: '/support/notice', component: NoticeList },
     { path: '/support/notice/:id', component: NoticeDetail },
     { path: '/support/faq', component: FaqList },
     { path: '/support/faq/:id', component: FaqDetail },
     { path: '/support/contact', component: ContactCenter },
     { path: '/support/contact/inquiry', component: SupportInquiry },
-    { path: '/support/contact/my', component: MyTickets },                       // 내 문의함 목록
-    { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true }, // 상세/스레드
-    //찜페이지
+    { path: '/support/contact/my', component: MyTickets },
+    { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true },
+
+    // 찜
     { path: '/wishlist', name: 'Wishlist', component: Wishlist },
 
-    // === ⬇️ 오너 전용 라우트 추가 (ROLE_OWNER 필요) ===
+    // 오너 (ROLE_OWNER)
     {
       path: '/owner',
       component: OwnerLayout,
@@ -180,16 +188,14 @@ const router = createRouter({
         { path: 'hotels/:hotelId/inventory', component: OwnerInventory },
         { path: 'hotels/:hotelId/bookings', component: OwnerBookings },
         { path: 'hotels/:hotelId/assign', component: AssignView },
-        // router/index.js 의 owner children에 추가
-{ path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') }
+        { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') },
       ]
     }
   ]
 })
 
-// ✅ 전역 가드: 소셜 로그인 리다이렉트 + 인증/역할 체크 + 날짜 정규화
+// 전역 가드: 소셜 로그인 리다이렉트 + 인증/역할 체크 + 날짜 정규화
 router.beforeEach((to, from, next) => {
-  // 1) hash(#token=...) 또는 query(?token=...)에서 토큰 추출
   const hash = to.hash || window.location.hash
   const m = hash && hash.match(/token=([^&]+)/)
   const tokenFromHash = m ? decodeURIComponent(m[1]) : null
@@ -197,24 +203,20 @@ router.beforeEach((to, from, next) => {
   if (tokenFromHash || tokenFromQuery) {
     const token = tokenFromHash || tokenFromQuery
     localStorage.setItem('token', token)
-    window.history.replaceState({}, '', to.path) // URL에서 제거
+    window.history.replaceState({}, '', to.path)
   }
 
-  // 2) 인증/역할 체크
   const token = localStorage.getItem('token')
   const isPayCallback = to.path.startsWith('/pay/')
 
-  // 2) 인증 체크
   if (!isPayCallback && to.meta.requiresAuth && !token) {
     return next('/login')
   }
 
-  // 3) 로그인 상태에서 /login, /signup 접근 막기
   if (!isPayCallback && (to.path === '/login' || to.path === '/signup') && token) {
     return next('/main')
   }
 
-  // 4) 역할 가드
   const needRoles = to.meta?.roles || []
   if (needRoles.length) {
     const user = token ? parseJwt(token) : null
@@ -224,24 +226,19 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // 오너 전용
   if (to.matched.some(r => r.meta && r.meta.requiresOwner)) {
     const claims = parseJwt(token)
     if (!hasOwnerRole(claims)) {
-      // 오너 권한 없으면 메인으로
       return next('/main')
     }
   }
 
-  // 3) 날짜 정규화: 검색/상세 공통
   const needDates = to.name === 'search' || to.name === 'hotel-detail'
   if (needDates) {
     const q = { ...(to.query || {}) }
     const fmt = (d) => new Date(d).toISOString().slice(0, 10)
     const isValid = (s) => !!s && !Number.isNaN(new Date(String(s)).getTime())
-    const addDays = (base, n) => {
-      const d = new Date(base); d.setDate(d.getDate() + n); return fmt(d)
-    }
+    const addDays = (base, n) => { const d = new Date(base); d.setDate(d.getDate() + n); return fmt(d) }
 
     let changed = false
     if (!isValid(q.checkIn)) { q.checkIn = fmt(new Date()); changed = true }
@@ -256,7 +253,6 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // ✅ 항상 마지막에 next()
   next()
 })
 
@@ -266,7 +262,6 @@ export async function api(path, opts = {}) {
   if (token) headers.Authorization = `Bearer ${token}`
   const res = await fetch(path, { ...opts, headers })
   if (res.status === 401) {
-    // 만료/인증실패 → 로그인으로
     localStorage.removeItem('token')
     window.location.href = '/login'
   }

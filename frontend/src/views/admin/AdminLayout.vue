@@ -12,12 +12,12 @@
             <span>대시보드</span>
           </RouterLink>
           <RouterLink class="item" to="/admin/bookings">예약 관리</RouterLink>
-          <RouterLink class="item" to="/admin/rooms">객실 현황</RouterLink>
           <RouterLink class="item" to="/admin/settlements">정산</RouterLink>
           <RouterLink class="item" to="/admin/users">유저 관리</RouterLink>
           <RouterLink class="item" to="/admin/hotels">호텔 관리</RouterLink>
           <RouterLink class="item" to="/admin/reviews">리뷰/신고</RouterLink>
           <RouterLink class="item" to="/admin/coupons">쿠폰/프로모션</RouterLink>
+          <RouterLink class="item" to="/admin/support">고객 지원</RouterLink>
         </nav>
   
         <div class="ver">v0.1</div>
