@@ -169,7 +169,17 @@ async function onRemove(it) {
   }
 }
 
-onMounted(() => loadPage(0, false))
+onMounted(async () => {
+  try {
+    items.value = await getWishlist()   // ✅ GET /api/my/wishlist
+  } catch (e) {
+    if (e?.response?.status === 401) {
+      router.push({ path: '/login', query: { redirect: '/wishlist' } })
+    } else {
+      console.error(e)
+    }
+  }
+})
 </script>
 
 <style scoped>

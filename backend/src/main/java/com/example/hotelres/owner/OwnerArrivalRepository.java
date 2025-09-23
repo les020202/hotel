@@ -1,4 +1,3 @@
-// src/main/java/com/example/hotelres/owner/OwnerArrivalRepository.java
 package com.example.hotelres.owner;
 
 import com.example.hotelres.owner.dto.ArrivalItemDto;
@@ -23,7 +22,7 @@ public interface OwnerArrivalRepository extends JpaRepository<BookingEntity, Lon
       ) then true else false end
     )
     from BookingEntity b
-      join BookingItemEntity bi on bi.bookingId = b.id
+      join BookingItemEntity bi on bi.booking = b
       join RoomTypeEntity rt on rt.id = bi.roomTypeId
     where b.hotelId = :hotelId
       and b.status = com.example.hotelres.owner.BookingStatus.CONFIRMED

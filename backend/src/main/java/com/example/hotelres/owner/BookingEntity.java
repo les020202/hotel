@@ -1,26 +1,43 @@
 package com.example.hotelres.owner;
 
 import jakarta.persistence.*;
+import lombok.*;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.example.hotelres.reservation.BookingGuest;
+
+/**
+ * 예약(Booking) 엔티티
+ * - 실제 테이블: bookings
+ * - 사용자(user_id), 호텔(hotel_id), 기간, 상태, 금액, 바우처 정보 포함
+ */
 @Entity
 @Table(name = "bookings")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class BookingEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // FK (users.id / hotels.id) — 숫자 FK로만 보유
+    // FK (users.id)
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    // FK (hotels.id)
     @Column(name = "hotel_id", nullable = false)
     private Long hotelId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(nullable = false, length = 20)
     private BookingStatus status = BookingStatus.PENDING;
 
     @Column(name = "check_in", nullable = false)
@@ -29,16 +46,16 @@ public class BookingEntity {
     @Column(name = "check_out", nullable = false)
     private LocalDate checkOut;
 
-    @Column(name = "nights", nullable = false)
+    @Column(nullable = false)
     private int nights;
 
-    @Column(name = "guests", nullable = false)
+    @Column(nullable = false)
     private int guests;
 
     @Column(name = "total_amount", nullable = false)
     private int totalAmount;
 
-    @Column(name = "currency", nullable = false, length = 3)
+    @Column(nullable = false, length = 3)
     private String currency = "KRW";
 
     @Column(name = "voucher_no", length = 40)
@@ -50,39 +67,7 @@ public class BookingEntity {
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
 
-    // --- getters/setters ---
-    public Long getId() { return id; }
-
-    public Long getUserId() { return userId; }
-    public void setUserId(Long userId) { this.userId = userId; }
-
-    public Long getHotelId() { return hotelId; }
-    public void setHotelId(Long hotelId) { this.hotelId = hotelId; }
-
-    public BookingStatus getStatus() { return status; }
-    public void setStatus(BookingStatus status) { this.status = status; }
-
-    public LocalDate getCheckIn() { return checkIn; }
-    public void setCheckIn(LocalDate checkIn) { this.checkIn = checkIn; }
-
-    public LocalDate getCheckOut() { return checkOut; }
-    public void setCheckOut(LocalDate checkOut) { this.checkOut = checkOut; }
-
-    public int getNights() { return nights; }
-    public void setNights(int nights) { this.nights = nights; }
-
-    public int getGuests() { return guests; }
-    public void setGuests(int guests) { this.guests = guests; }
-
-    public int getTotalAmount() { return totalAmount; }
-    public void setTotalAmount(int totalAmount) { this.totalAmount = totalAmount; }
-
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
-
-    public String getVoucherNo() { return voucherNo; }
-    public void setVoucherNo(String voucherNo) { this.voucherNo = voucherNo; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    // --- 연관 관계 (예약 인원 정보) ---
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<BookingGuest> guestsInfo = new ArrayList<>();
 }

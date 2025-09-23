@@ -1,20 +1,21 @@
 package com.example.hotelres.api;  
 // API 계층 컨트롤러 패키지
 
-import com.example.hotelres.api.dto.SupportDtos.FaqItem;
-// FAQ 응답 DTO (id, category, question, answer)
-
-import com.example.hotelres.common.NotFoundException;
-// 리소스가 없을 때 발생하는 예외
-
-import com.example.hotelres.support.Faq;
-import com.example.hotelres.support.FaqRepo;
-// FAQ 엔티티 및 JPA Repository
-
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.hotelres.api.dto.SupportDtos.FaqItem;
+// FAQ 응답 DTO (id, category, question, answer)
+import com.example.hotelres.common.NotFoundException;
+import com.example.hotelres.support.Faq;
+import com.example.hotelres.support.FaqRepo;
+
+import lombok.RequiredArgsConstructor;
 // Spring Web MVC 관련 import
 
 @RestController

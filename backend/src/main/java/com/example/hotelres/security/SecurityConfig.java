@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -12,6 +13,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity; // ⬅ 추가
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
@@ -29,10 +31,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpMethod;
-
+import java.util.*;
+import java.util.stream.Collectors;
 
 
 @Configuration
+@EnableWebSecurity // ⬅ 추가
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -43,8 +47,15 @@ public class SecurityConfig {
     private final OAuth2UserServiceImpl oAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
 
+    // ⬅ 아래 config에서 가져온 "프로퍼티 기반 CORS 허용" 기능
+    // 쉼표(,)로 여러 개 지정 가능. 기본값은 localhost/127.0.0.1:5173
+    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
+    private String allowedOriginsProp;
+
     @Bean
-    public PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public DaoAuthenticationProvider authProvider() {
@@ -84,6 +95,13 @@ public class SecurityConfig {
                 // 공개된 호텔 검색 API
                 .requestMatchers(HttpMethod.GET, "/api/hotels/**", "/api/search/**").permitAll()
                 // 기본적으로 모든 다른 요청은 인증 필요
+                .requestMatchers("/api/time").permitAll()
+                .requestMatchers("/reservation/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/toss/confirm").permitAll()
+                .requestMatchers("/payments/toss/**").permitAll()
+                .requestMatchers("/api/reservations/hold/**").permitAll() // 단건 조회는 누구나 가능
+                .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN") // 운영 전용은 잠그고
+                .requestMatchers("/api/coupons/**").authenticated()
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form.disable())

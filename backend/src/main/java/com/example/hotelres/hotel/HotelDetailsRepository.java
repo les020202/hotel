@@ -129,12 +129,7 @@ public class HotelDetailsRepository {
             HotelDetailsDto.RoomTypeOffer t = new HotelDetailsDto.RoomTypeOffer();
             t.setRoomTypeId(nLong(r[0]));
             t.setName((String) r[1]);
-            t.setCapacity(nInt(r[2]));
             t.setAreaSqm(nInt(r[3]));
-            t.setMinRemaining(nInt(r[4]));
-            t.setPriceSum(nLong(r[5]));
-            t.setNights(nInt(r[6]));
-            t.setTemplateImageUrl((String) r[7]);
             types.add(t);
         }
 
@@ -174,7 +169,12 @@ public class HotelDetailsRepository {
         dto.setHotel(h);
         dto.setGallery(g);
         dto.setRoomTypes(types);
-        dto.setAmenities(amens);   // ← 필수! (빈 리스트로 덮어쓰지 말 것)
+        dto.setAmenities(List.of());
         return dto;
+    }
+
+    public boolean existsById(Long id) {
+        // TODO Auto-generated method stub
+        return false;
     }
 }

@@ -1,4 +1,8 @@
+
 <!-- src/views/mypage/Account.vue -->
+=======
+<!-- src/views/mypage/Account.vue -->
+>>>>>>> origin/won1
 <template>
   <div class="account">
     <h2>Account</h2>
@@ -482,7 +486,15 @@ async function save() {
       gender: me.value.gender
     })
 
+    // 비밀번호 변경 처리
     if (edit.value.password) {
+      // 새 비밀번호 확인 검증
+      if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+        errors.value.password = '새 비밀번호가 일치하지 않습니다.'
+        saving.value = false
+        return
+      }
+      // 백엔드에 비밀번호 변경 요청
       await api.put('/users/me/password', {
         currentPassword: passwordForm.value.currentPassword,
         newPassword: passwordForm.value.newPassword
@@ -518,7 +530,6 @@ function togglePasswordEdit() {
 /* 전체 레이아웃 */
 .account h2 { margin-bottom: 12px; }
 .box { border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
-
 /* 항목 줄 하나 */
 .row {
   display: grid; grid-template-columns: 160px 1fr auto; align-items: center;
@@ -598,6 +609,8 @@ input, select {
   border-radius: 10px; cursor: pointer; font-size: 12px;
 }
 .small[disabled] { opacity: .6; cursor: not-allowed; }
+/* 에러 메시지 */
+.err { color: #e11d48; font-size: 12px; margin-top: 4px; display: block; }
 
 /* 저장 버튼 영역 */
 .actions { margin-top: 14px; display: flex; justify-content: flex-end; }

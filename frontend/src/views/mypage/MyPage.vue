@@ -217,7 +217,6 @@ async function uploadAvatar(e) {
   } finally { e.target.value = "" }
 }
 </script>
-
 <style scoped>
 .mypage {
   max-width: 1100px;

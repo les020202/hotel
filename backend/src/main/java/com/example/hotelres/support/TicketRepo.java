@@ -4,7 +4,6 @@ import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
-
 /*
  * TicketRepo
  * - SupportTicket 엔티티에 대한 JPA 리포지토리 인터페이스

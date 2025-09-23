@@ -2,14 +2,70 @@
 import axios from 'axios'
 import router from '@/router'
 
-// === Axios 인스턴스 ===
-// baseURL: .env.development 의 VITE_API_BASE=/api 혹은 http://localhost:8888/api 등
+// === Axios 인스턴스 생성 ===
+// VITE_API_BASE 가 없으면 기본으로 /api 사용 (proxy 통해 8888로 전달)
+const baseURL = import.meta.env.VITE_API_BASE || '/api'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || '/api',
-  withCredentials: true, // refresh token 등 쿠키 사용 시 필요
+  baseURL,
+  withCredentials: true, // ✅ refresh 쿠키 사용
 })
 
-// === 공통 에러 메시지 추출기 (기타 화면에서 쓸 수 있게 유지)
+// === 로컬 스토리지 키 ===
+const KEY_PRIMARY = 'token'
+const KEY_LEGACY = 'accessToken'
+
+// === 인증 상태 (메모리 + 로컬스토리지 동기화) ===
+let accessToken =
+  localStorage.getItem(KEY_PRIMARY) ||
+  localStorage.getItem(KEY_LEGACY) ||
+  null
+
+let userProfile = JSON.parse(localStorage.getItem('userProfile') || 'null')
+
+// === 상태 helpers ===
+export function getUser() {
+  return userProfile
+}
+export function isLoggedIn() {
+  return !!(
+    accessToken ||
+    localStorage.getItem(KEY_PRIMARY) ||
+    localStorage.getItem(KEY_LEGACY)
+  )
+}
+function emitAuthChanged() {
+  try {
+    window.dispatchEvent(
+      new CustomEvent('auth:changed', {
+        detail: { user: userProfile, token: accessToken },
+      }),
+    )
+  } catch (_) {}
+}
+export function onAuthChanged(handler) {
+  window.addEventListener('auth:changed', handler)
+  return () => window.removeEventListener('auth:changed', handler)
+}
+export function setAuth(at, user) {
+  accessToken = at || null
+  userProfile = user || null
+
+  if (at) {
+    localStorage.setItem(KEY_PRIMARY, at)
+    localStorage.setItem(KEY_LEGACY, at)
+  } else {
+    localStorage.removeItem(KEY_PRIMARY)
+    localStorage.removeItem(KEY_LEGACY)
+  }
+
+  if (user) localStorage.setItem('userProfile', JSON.stringify(user))
+  else localStorage.removeItem('userProfile')
+
+  emitAuthChanged()
+}
+
+// (옵션) 공통 에러 메시지 추출기 — 일부 API에서 사용
 function getErrorMessage(e) {
   const r = e?.response
   return (
@@ -21,77 +77,105 @@ function getErrorMessage(e) {
   )
 }
 
-// === 요청 인터셉터: JWT 자동 첨부 ===
-api.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('token')
-  if (token) cfg.headers.Authorization = `Bearer ${token}`
-  return cfg
+// === 로그인/로그아웃 ===
+// ✅ 두 번째 파일의 정책 반영: 서버 JSON을 보존해 반환/던짐 (attempts/locked 사용 가능)
+//    - 성공 시 토큰 저장은 화면(LoginView)에서 처리 (localStorage.setItem('token', token))
+//    - 필요하면 이후에 setAuth(token, me)로 통합할 수 있음(현재 요구사항은 화면에서 처리)
+export async function login(payload) {
+  try {
+    const { data } = await api.post('/auth/login', payload, { withCredentials: true })
+    // data 예시: { token, attempts?, locked? ... }
+    return data
+  } catch (e) {
+    // 서버 JSON 그대로 던지기 → LoginView에서 { error, attempts, locked } 사용
+    if (e?.response?.data) throw e.response.data
+    // 네트워크/기타 예외 최소 형태
+    throw { error: 'UNKNOWN', attempts: 0, locked: false }
+  }
+}
+
+export async function logout() {
+  try {
+    await api.post('/auth/logout', {}, { withCredentials: true })
+  } catch {}
+  setAuth(null, null)
+  router.push('/login')
+}
+
+// === Axios 인터셉터 ===
+api.interceptors.request.use((config) => {
+  const latest =
+    localStorage.getItem(KEY_PRIMARY) ||
+    localStorage.getItem(KEY_LEGACY) ||
+    accessToken
+  if (latest) {
+    accessToken = latest
+    config.headers.Authorization = `Bearer ${latest}`
+  }
+  return config
 })
 
-// === 응답 인터셉터: 401 → refresh → 대기 중 요청 재시도 ===
-let isRefreshing = false
-let subscribers = []
-const onRefreshed = (token) => { subscribers.forEach((cb) => cb(token)); subscribers = [] }
-const addSubscriber = (cb) => subscribers.push(cb)
+let refreshing = false
+let waiters = []
+function waitRefresh() {
+  return new Promise((res) => waiters.push(res))
+}
+function resume() {
+  waiters.forEach((r) => r())
+  waiters = []
+}
 
 api.interceptors.response.use(
-  (res) => res,
-  async (err) => {
-    const { config, response } = err
-    if (!response) return Promise.reject(err)
+  (r) => r,
+  async (error) => {
+    const original = error?.config
+    const status = error?.response?.status
+    if (!original || original._retry) return Promise.reject(error)
 
-    const isAuthPath = config.url?.includes('/auth/')
+    // ✅ 두 번째 파일 정책 반영: /auth/ 경로는 refresh 시도하지 않음
+    const isAuthPath = typeof original.url === 'string' && original.url.includes('/auth/')
 
-    // 401이고 /auth/ 가 아닌 API면 refresh 시도
-    if (response.status === 401 && !config._retry && !isAuthPath) {
-      config._retry = true
-
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          addSubscriber((newToken) => {
-            config.headers.Authorization = 'Bearer ' + newToken
-            resolve(api(config))
-          })
-        })
+    if (status === 401 && !isAuthPath) {
+      if (refreshing) {
+        await waitRefresh()
+        return api(original)
       }
-
-      isRefreshing = true
+      refreshing = true
+      original._retry = true
       try {
-        const { data } = await api.post('/auth/refresh')
-        const newToken = data.token
-        localStorage.setItem('token', newToken)
-        onRefreshed(newToken)
-
-        config.headers.Authorization = 'Bearer ' + newToken
-        return api(config)
+        const resp = await axios.post(
+          `${baseURL}/auth/refresh`,
+          {},
+          { withCredentials: true }
+        )
+        const newToken = resp.data?.token || resp.data?.accessToken
+        if (newToken) {
+          setAuth(newToken, userProfile)
+          return api(original)
+        } else {
+          setAuth(null, null)
+          return Promise.reject(error)
+        }
       } catch (e) {
-        // refresh 실패 → 로그인 재유도
-        localStorage.removeItem('token')
-        router.push('/login')
-        // ⛔️ 래핑하지 말고 원본 에러 그대로 던진다
+        setAuth(null, null)
         return Promise.reject(e)
       } finally {
-        isRefreshing = false
+        refreshing = false
+        resume()
       }
     }
-
-    // ⛔️ 중요: /auth/ 포함 요청은 서버 JSON을 화면에 전달해야 하므로 래핑 금지
-    // 그 외도 원본 유지 (필요하면 화면에서 getErrorMessage로 변환)
-    return Promise.reject(err)
-  }
+    return Promise.reject(error)
+  },
 )
 
-// ===================== 공개 API =====================
-
-// 아이디 중복 체크
+// === 공개 API ===
+// 사용자 관련
+export const getMe = () => api.get('/users/me').then((r) => r.data)
 export const checkUsername = (loginId) =>
   api.get('/auth/check-username', { params: { loginId } }).then((r) => r.data)
-
-// 이메일 중복 체크
 export const checkEmail = (email) =>
   api.get('/auth/check-email', { params: { email } }).then((r) => r.data)
 
-// 회원가입 (이메일 인증코드 쿼리스트링로 전달)
 export const signup = async (payload, verificationCode) => {
   try {
     const { data } = await api.post(
@@ -105,118 +189,93 @@ export const signup = async (payload, verificationCode) => {
   }
 }
 
-// 로그인
-export const login = async (payload) => {
-  try {
-    const { data } = await api.post('/auth/login', payload)
-    return data
-  } catch (e) {
-    // ⛔️ 서버가 내려준 JSON을 보존
-    if (e.response?.data) {
-      throw e.response.data
-    }
-    // 네트워크/예외 상황 최소 형태
-    throw { error: 'UNKNOWN', attempts: 0, locked: false }
-  }
-}
-
-// 로그아웃
-export const logout = () => api.post('/auth/logout').then((r) => r.data)
-
-// 내 정보 (마이페이지)
-// 서버가 /me만 제공한다면 아래 라인을 api.get('/me')로 교체
-export const getMe = () => api.get('/users/me').then((r) => r.data)
-
-// ===== 이메일 인증 관련 =====
-
-// 인증 코드 전송
-export const sendEmailCode = async (email) => {
-  try {
-    const { data } = await api.post('/auth/email/send', { email })
-    return data
-  } catch (e) {
-    throw new Error(getErrorMessage(e))
-  }
-}
-
-// 인증 코드 검증
-export const verifyEmailCode = async (email, code) => {
-  try {
-    const { data } = await api.post('/auth/email/verify', { email, code })
-    return data
-  } catch (e) {
-    throw new Error(getErrorMessage(e))
-  }
-}
-
-// 이메일 변경 (인증코드 필요)
 export const updateMyEmail = async ({ email, verificationCode }) => {
   try {
     const { data } = await api.patch('/users/me/email', { email, verificationCode })
-    return data
+  return data
   } catch (e) {
     throw new Error(getErrorMessage(e))
   }
 }
+
+// 이메일 인증 관련
+export const sendEmailCode = async (email) =>
+  (await api.post('/auth/email/send', { email })).data
+export const verifyEmailCode = async (email, code) =>
+  (await api.post('/auth/email/verify', { email, code })).data
 
 // 비밀번호 재설정
-export const resetPassword = async (email, code, newPassword) => {
-  try {
-    const { data } = await api.post('/auth/reset-password', { email, code, newPassword })
-    return data
-  } catch (e) {
-    throw new Error(getErrorMessage(e))
-  }
-}
+export const resetPassword = async (email, code, newPassword) =>
+  (await api.post('/auth/reset-password', { email, code, newPassword })).data
 
-// ===== 프로필/커버 & 이미지 업로드 =====
-
-// 프로필 템플릿 변경
+// 프로필/커버 이미지 관련
 export const setProfileTemplate = async (template) => {
   try {
-    const { data } = await api.put('/users/me/profile/template', { template })
-    return data
+    return (await api.put('/users/me/profile/template', { template })).data
   } catch (e) {
     throw new Error(getErrorMessage(e))
   }
 }
-
-// 커버 템플릿 변경
 export const setCoverTemplate = async (template) => {
   try {
-    const { data } = await api.put('/users/me/cover/template', { template })
-    return data
+    return (await api.put('/users/me/cover/template', { template })).data
   } catch (e) {
     throw new Error(getErrorMessage(e))
   }
 }
 
-// 프로필 이미지 업로드 (multipart/form-data)
 export const uploadProfileImage = async (file) => {
   const fd = new FormData()
   fd.append('file', file)
   try {
-    const { data } = await api.post('/users/me/profile/upload', fd, {
+    return (await api.post('/users/me/profile/upload', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    return data
+    })).data
+  } catch (e) {
+    throw new Error(getErrorMessage(e))
+  }
+}
+export const uploadCoverImage = async (file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    return (await api.post('/users/me/cover/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })).data
   } catch (e) {
     throw new Error(getErrorMessage(e))
   }
 }
 
-// 커버 이미지 업로드 (multipart/form-data)
-export const uploadCoverImage = async (file) => {
-  const fd = new FormData()
-  fd.append('file', file)
-  try {
-    const { data } = await api.post('/users/me/cover/upload', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    return data
-  } catch (e) {
-    throw new Error(getErrorMessage(e))
-  }
+// 호텔 관련
+export async function hotelsSearch(params) {
+  return (await api.get('/hotels/search', { params })).data
+}
+export async function hotelDetail(id) {
+  return (await api.get(`/hotels/${id}`)).data
+}
+export async function fetchMinPrices(ids) {
+  const params = { ids: ids.join(',') }
+  return (await api.get('/hotels/min-price', { params })).data || {}
+}
+export async function fetchRegions(excludeJeju = true) {
+  return (await api.get('/hotels/regions', { params: { excludeJeju } })).data
+}
+
+// 마케팅 구독
+export async function subscribeEmail(email) {
+  return (await api.post('/marketing/subscribe', { email })).data
+}
+
+// 위시리스트
+export async function getWishlist() {
+  return (await api.get('/my/wishlist')).data
+}
+export async function addWishlist(hotelId) {
+  return (await api.post('/my/wishlist', { hotelId })).data
+}
+export async function removeWishlist(hotelId) {
+  return (await api.delete(`/my/wishlist/${hotelId}`)).data
 }
 
 export default api

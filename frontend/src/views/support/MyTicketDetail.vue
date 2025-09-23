@@ -13,6 +13,11 @@
       <span class="pill mine">내 문의</span>는 <strong>운영자에게 전송된 내 메시지</strong>이며,
       <span class="pill admin">운영자 답변</span>은 <strong>운영자가 보낸 회신</strong>입니다.
     </div>
+
+    <div v-if="loading" class="loading">불러오는 중…</div>
+
+    <div v-else>
+      <div class="thread">
         <div
           class="msg"
           v-for="m in messages"
@@ -37,6 +42,8 @@
           <button class="send" :disabled="!reply" @click="sendReply">보내기</button>
         </div>
       </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -47,7 +54,6 @@
   - ADMIN(대소문자 무관, 'ROLE_ADMIN' 포함) 문자열이 하나라도 있으면 운영자 답변으로 처리
   - 그 외는 '내 문의'로 처리
 */
-
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getTicket, getTicketMessages, postTicketMessage } from '@/api/support'

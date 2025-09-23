@@ -1,111 +1,211 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getMe, logout as apiLogout } from '@/api/auth'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { isLoggedIn, setAuth, getMe, logout as apiLogout } from '@/api/auth'
 
+import SearchBar from '@/components/SearchBar.vue'
+import RegionCards from '@/components/RegionCards.vue'
+import RandomHotels from '@/components/RandomHotels.vue'
+import PromoSignupCouponBanner from '@/components/PromoSignupCouponBanner.vue'
+
+/* -----------------------------
+ *  Hero(기존 HeroSearch 내용)
+ * ----------------------------- */
+const hero = ref('')
+let heroTimer = null
+
+// 커스터마이즈 값(필요시 바꿔도 됨)
+const heroImages = [
+  'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?q=80&w=1600&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1491553895911-0055eca6402d?q=80&w=1600&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=1600&auto=format&fit=crop',
+  'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=1600&auto=format&fit=crop',
+]
+const heroHeightPx = 420        // 숫자(px) 또는 '420px' 형태 문자열 사용 가능
+const heroRotateMs = 0          // 0이면 자동교체 안 함
+const heroTitle = 'hotel'
+const heroSubtitle = '쉽고 빠르게 예약'
+
+function pickHero() {
+  if (!heroImages.length) return
+  hero.value = heroImages[Math.floor(Math.random() * heroImages.length)]
+}
+
+/* -----------------------------
+ *  메인 기존 로직
+ * ----------------------------- */
 const router = useRouter()
 const me = ref(null)
 const msg = ref('')
+
+// 검색 상태(아래 검색바 v-model용)
+const q = ref('')
+const checkIn = ref('')
+const checkOut = ref('')
+const adults = ref(2)
+const children = ref(0)
+const rooms = ref(1)
 
 async function fetchMe () {
   msg.value = ''
   try {
     me.value = await getMe()
   } catch (e) {
-    msg.value = `토큰 확인 실패: ${e?.response?.status || ''}`
+    // 토큰이 없거나 만료되면 그냥 무시(메인은 공개 페이지)
+    msg.value = ''
   }
 }
 
 onMounted(async () => {
-  // 1) 소셜 로그인 성공 시 /main#token=... 으로 오므로, 해시에서 토큰 추출
-  const m = location.hash.match(/token=([^&]+)/)
+  // Hero 초기화
+  pickHero()
+  if (heroRotateMs > 0) {
+    heroTimer = setInterval(pickHero, heroRotateMs)
+  }
+
+  // 소셜 리다이렉트로 들어오는 #token=... 처리 (있을 때만)
+  const m = location.hash && location.hash.match(/(?:^|#|&)token=([^&]+)/)
   if (m) {
     const token = decodeURIComponent(m[1])
-    localStorage.setItem('token', token)
-    history.replaceState({}, '', location.pathname) // 주소창에서 해시 제거
+    setAuth(token, null) // 전역 토큰 저장
+    history.replaceState({}, '', location.pathname + location.search) // 해시 제거
   }
 
-  // 2) 저장된 토큰이 전혀 없으면 로그인 페이지로
-  if (!localStorage.getItem('token')) {
-    router.push('/login')
-    return
+  // ✅ 메인은 공개: 토큰이 있으면 프로필만 불러오고, 없으면 아무것도 안 함
+  if (isLoggedIn()) {
+    try {
+      const profile = await getMe()
+      setAuth(localStorage.getItem('accessToken') || localStorage.getItem('token'), profile)
+      me.value = profile
+    } catch { /* 무시 */ }
   }
-
-  // 3) 내 정보 로딩
-  await fetchMe()
 })
 
-async function checkToken () { await fetchMe() }
-/* =============================
- * 로그아웃: 서버 쿠키 제거 → 로컬 정리 → 하드 리다이렉트
- * ============================= */
-async function logout () {
-  try {
-    // (A) 우리 API 로그아웃 (refreshToken 쿠키 만료)
-    await apiLogout().catch(() => {})
+onUnmounted(() => { if (heroTimer) clearInterval(heroTimer) })
 
-    // (B) Spring Security /logout 도 함께 호출 (JSESSIONID 제거)
-    await fetch('http://localhost:8888/logout', {
-      method: 'POST',
-      credentials: 'include'
-    }).catch(() => {})
-  } finally {
-    // (C) 클라이언트 정리
-    localStorage.removeItem('token')
+async function logout () {
+  try { await apiLogout() } finally {
+    // 메인은 공개 페이지이므로 그냥 새로고침/리다이렉트 없이 머물러도 OK
     me.value = null
-    // 하드 리로드로 세션/리다이렉트 상태 깔끔하게 초기화
-    window.location.replace('/login')
-    
-    
   }
 }
 
-// ✅ 마이페이지 이동 함수
-    function goMyPage () {
-      router.push('/mypage')
+function goMyPage () { router.push('/mypage') }
+function checkToken () { fetchMe() }
+
+/* 기존 핸들러 유지(콘솔 출력) */
+function doSearch (p) {
+  console.log('검색 조건:', p || { q: q.value, checkIn: checkIn.value, checkOut: checkOut.value, adults: adults.value, children: children.value, rooms: rooms.value })
 }
-
-
-
-
-/* ✅ 예약 페이지로 이동 */
-function goReservation () {
-  router.push('/reservation')
-}
-
 </script>
 
 <template>
   <div class="page">
-    <div class="card">
-      <div class="head">
-        <h1 class="title">메인 페이지</h1>
-        <p class="greet" v-if="me">환영합니다, <b>{{ me.name }}</b>님</p>
+    <!-- ======= Hero (기존 HeroSearch) ======= -->
+    <section
+      class="hero"
+      :style="{ '--hero-h': (typeof heroHeightPx === 'number' ? heroHeightPx + 'px' : String(heroHeightPx)) }"
+    >
+      <!-- 배경 레이어(여기서만 클리핑) -->
+      <div class="hero__bg" :style="{ '--hero-url': `url('${hero}')` }">
+        <div class="hero__scrim"></div>
       </div>
 
-      <div class="row gap">
-        <button class="btn primary" @click="checkToken">토큰 확인(/api/me)</button>
-        <button class="btn" @click="goMyPage">마이페이지로 이동</button> <!-- ✅ 추가 -->
-        <button class="btn" @click="logout">로그아웃</button>
-        <!-- ✅ 예약하기 버튼 -->
-        <button class="btn success" @click="goReservation">예약하기</button>
-      </div>
+      <!-- 실제 콘텐츠 -->
+      <div class="hero__inner">
+        <h1 class="hero__title">{{ heroTitle }}</h1>
+        <p class="hero__subtitle">{{ heroSubtitle }}</p>
 
-      <p class="hint" v-if="msg">{{ msg }}</p>
-      <pre v-if="me" class="mt" style="white-space:pre-wrap">{{ JSON.stringify(me, null, 2) }}</pre>
-    </div>
+        <!-- Hero 내부 검색바: 아래 SearchBar와 동일하게 동작 -->
+      </div>
+    </section>
+
+    <!-- ======= 아래(기존) 검색바 ======= -->
+    <SearchBar
+      v-model:q="q"
+      v-model:checkIn="checkIn"
+      v-model:checkOut="checkOut"
+      v-model:adults="adults"
+      v-model:children="children"
+      v-model:rooms="rooms"
+      @search="doSearch"
+      class="mt-8"
+    />
+
+    <RegionCards class="mt-8" />
+    <PromoSignupCouponBanner class="mt-8" />
+    <RandomHotels class="mt-10" />
   </div>
 </template>
-<style scoped>
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b0b0c}
-.card{width:100%;max-width:720px;background:#111318;border:1px solid #24262b;border-radius:16px;padding:28px}
 
-.head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
-.title{font-size:22px;font-weight:800;color:#e5e7eb}
-.greet{color:#cbd5e1}
-.row{display:flex;align-items:center}.gap{gap:10px}
-.btn{padding:.65rem 1rem;border:1px solid #30343a;border-radius:10px;background:#171a1f;color:#e5e7eb;cursor:pointer}
-.btn.primary{background:#6b46c1;border-color:#6b46c1}
-.btn.success{background:#22c55e;border-color:#22c55e;color:#fff} /* ✅ 예약하기 스타일 */
-.hint{color:#cbd5e1}.mt{margin-top:12px}
+<style scoped>
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+  position: relative;
+  overflow: visible;
+}
+.mt-8 { margin-top: 32px; }
+
+/* ===== Hero (기존 HeroSearch 스타일) ===== */
+.hero{
+  position: relative;
+  height: var(--hero-h);
+  border-radius: 20px;
+  /* ✅ 팝오버가 잘리지 않도록 숨김 제거 */
+  overflow: visible;
+}
+
+/* 배경을 별도 레이어로 분리하여 여기서만 클리핑 */
+.hero__bg{
+  position:absolute; inset:0;
+  border-radius: inherit;
+  overflow: hidden;
+  background: center/cover no-repeat var(--hero-url);
+  z-index: 0;
+}
+
+/* 오버레이는 시각적으로만 깔고, 클릭은 통과 */
+.hero__scrim{
+  position:absolute; inset:0;
+  background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,.10));
+  pointer-events: none; /* ✅ 클릭 방해 금지 */
+}
+
+/* 검색바와 텍스트는 배경 위로 */
+.hero__inner{
+  position: relative;
+  z-index: 1; /* ✅ 확실히 위로 */
+  inset:0;
+  padding: 24px;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap: 18px; color:#fff; text-align:center;
+}
+
+.hero__title{ font-size: 38px; font-weight: 800; letter-spacing:-.3px; margin:0; }
+.hero__subtitle{ margin:0; opacity:.96; }
+
+/* 팝오버가 겹칠 때를 대비해 z-index 조금 올려 둠 */
+.hero__search{
+  width: min(980px, 96%);
+  background:#fff;
+  border-radius: 20px;
+  padding: 14px;
+  box-shadow: 0 16px 36px rgba(0,0,0,.20);
+  position: relative;
+  z-index: 10;
+}
+
+/* SearchBar 기본 박스(테두리/그림자) 제거해서 깨끗하게 */
+:deep(.search-box){ border:none; background:transparent; box-shadow:none; padding:0; }
+/* 입력 높이 조금 키우기(원하면 조절) */
+:deep(.inp){ height: 52px; }
+
+@media (max-width: 900px){
+  .hero{ height: 320px; }
+  .hero__title{ font-size: 28px; }
+  .hero__search{ padding: 10px; border-radius: 14px; }
+}
 </style>

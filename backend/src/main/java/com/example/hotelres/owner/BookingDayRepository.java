@@ -1,32 +1,44 @@
 package com.example.hotelres.owner;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
-import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.List;
 
 public interface BookingDayRepository extends JpaRepository<BookingDay, Long> {
 
-    @Query("""
-        select b from BookingDay b
-        where b.hotelId = :hotelId
-          and b.roomTypeId = :roomTypeId
-          and b.stayDate between :from and :to
-        order by b.stayDate
-    """)
-    List<BookingDay> findRange(@Param("hotelId") Long hotelId,
-                               @Param("roomTypeId") Long roomTypeId,
-                               @Param("from") LocalDate from,
-                               @Param("to") LocalDate to);
-
+    /** 재고 차감/홀드 시 사용: 범위를 PESSIMISTIC_WRITE로 잠근다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        select b from BookingDay b
-        where b.hotelId = :hotelId and b.roomTypeId = :roomTypeId and b.stayDate = :day
+        SELECT bd FROM BookingDay bd
+         WHERE bd.hotelId    = :hotelId
+           AND bd.roomTypeId = :roomTypeId
+           AND bd.stayDate  >= :checkIn
+           AND bd.stayDate  <  :checkOut
+         ORDER BY bd.stayDate
     """)
-    Optional<BookingDay> findForUpdate(@Param("hotelId") Long hotelId,
-                                       @Param("roomTypeId") Long roomTypeId,
-                                       @Param("day") LocalDate day);
+    List<BookingDay> findForUpdate(
+            @Param("hotelId") Long hotelId,
+            @Param("roomTypeId") Long roomTypeId,
+            @Param("checkIn") LocalDate checkIn,
+            @Param("checkOut") LocalDate checkOut
+    );
+
+    /** 단순 조회용 범위 검색 */
+    @Query("""
+        SELECT bd FROM BookingDay bd
+         WHERE bd.hotelId    = :hotelId
+           AND bd.roomTypeId = :roomTypeId
+           AND bd.stayDate  >= :checkIn
+           AND bd.stayDate  <  :checkOut
+         ORDER BY bd.stayDate
+    """)
+    List<BookingDay> findRange(
+            @Param("hotelId") Long hotelId,
+            @Param("roomTypeId") Long roomTypeId,
+            @Param("checkIn") LocalDate checkIn,
+            @Param("checkOut") LocalDate checkOut
+    );
 }

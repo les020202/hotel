@@ -1,6 +1,7 @@
 // src/api/wishlistApi.js
 
 import api from '@/api/auth' 
+import { reactive } from 'vue'
 // ✅ 공용 Axios 인스턴스 사용
 // - Authorization 헤더(JWT) 자동 첨부
 // - 401 응답 시 refresh 토큰으로 재발급/재시도
@@ -63,4 +64,142 @@ export const removeWishlist = (idOrObj) => {
   if (typeof idOrObj === 'number') return deleteWishlist(idOrObj)
   if (idOrObj && typeof idOrObj.wishlistId === 'number') return deleteWishlist(idOrObj.wishlistId)
   return Promise.reject(new Error('removeWishlist: pass wishlistId (number) or { wishlistId }'))
+}
+
+// ---------------------------------------------
+// [추가 기능] 전역 상태 + 하트 토글 헬퍼
+// ---------------------------------------------
+
+/**
+ * 전역 찜 상태 (이 모듈이 싱글톤처럼 동작)
+ * - ids: Set<hotelId>
+ * - map: Map<hotelId, wishlistId> (서버 삭제 시 필요)
+ */
+const store = reactive({
+  loaded: false,     // 서버에서 최소 1회 로드했는지
+  busy: false,       // 토글/로드 동시실행 보호
+  ids: new Set(),    // 호텔ID Set
+  map: new Map(),    // hotelId -> wishlistId
+})
+
+/** 외부에서 상태를 관찰하고 싶을 때 사용(선택) */
+export function wishlistState() {
+  return store
+}
+
+/** 내부: 서버에서 받은 items를 상태에 반영 */
+function ingest(items = []) {
+  const nextIds = new Set(store.ids)
+  const nextMap = new Map(store.map)
+  for (const it of items) {
+    const hotelId = it?.hotel?.id ?? it?.hotelId ?? it?.id
+    const wishlistId = it?.wishlistId ?? it?.id
+    if (!hotelId) continue
+    nextIds.add(Number(hotelId))
+    if (wishlistId) nextMap.set(Number(hotelId), Number(wishlistId))
+  }
+  store.ids = nextIds
+  store.map = nextMap
+}
+
+/**
+ * 로그인 상태일 때 최초 1회 전체(또는 여러 페이지) 로딩
+ * - 페이징 API를 돌면서 전부 Set에 채움
+ * - 규모가 크면 limit를 늘리거나 일부만 싱크해도 OK
+ */
+export async function ensureWishlistLoaded() {
+  if (store.loaded || store.busy) return
+  if (!isLoggedIn()) { store.loaded = true; return }
+
+  store.busy = true
+  try {
+    let offset = 0
+    const limit = 100
+    while (true) {
+      const page = await fetchWishlist({ limit, offset })
+      const items = page?.items ?? page ?? []
+      ingest(items)
+      if (!page?.hasMore) break
+      offset = page?.nextOffset ?? (offset + items.length)
+    }
+  } finally {
+    store.busy = false
+    store.loaded = true
+  }
+}
+
+/** 강제 재동기화가 필요할 때 */
+export async function refreshWishlistState() {
+  store.loaded = false
+  store.ids.clear()
+  store.map.clear()
+  await ensureWishlistLoaded()
+}
+
+/** 현재 호텔이 찜 상태인지 */
+export function isWished(hotelId) {
+  if (!hotelId) return false
+  return store.ids.has(Number(hotelId))
+}
+
+/**
+ * 하트 토글(낙관적 업데이트)
+ * - 비로그인: AUTH_REQUIRED 에러 throw → 호출부에서 /login으로 유도
+ * - 서버 실패 시 UI 롤백
+ */
+export async function toggleWishlist(hotelId) {
+  hotelId = Number(hotelId)
+  if (!hotelId) return
+
+  if (!isLoggedIn()) {
+    const err = new Error('AUTH_REQUIRED')
+    err.code = 'AUTH_REQUIRED'
+    throw err
+  }
+
+  // 초기 로딩 보장
+  await ensureWishlistLoaded()
+
+  // 동시 요청 보호(원하면 제거 가능)
+  if (store.busy) return
+  store.busy = true
+
+  const already = store.ids.has(hotelId)
+
+  // 낙관적 UI
+  if (already) store.ids.delete(hotelId)
+  else store.ids.add(hotelId)
+
+  try {
+    if (already) {
+      // 서버 삭제에는 wishlistId가 필요 → map에서 찾아 사용
+      const wid = store.map.get(hotelId)
+      if (!wid) {
+        // map에 없으면 재동기화 후 재시도
+        await refreshWishlistState()
+        const wid2 = store.map.get(hotelId)
+        if (!wid2) throw new Error('Missing wishlistId for hotelId=' + hotelId)
+        await deleteWishlist(wid2)
+      } else {
+        await deleteWishlist(wid)
+      }
+      store.map.delete(hotelId)
+    } else {
+      const created = await addWishlist(hotelId)
+      // 응답에서 wishlistId 추출(필드명이 환경마다 다를 수 있음 → 방어코드)
+      const wid =
+        created?.wishlistId ??
+        created?.id ??
+        created?.data?.wishlistId ??
+        created?.data?.id
+      if (wid) store.map.set(hotelId, Number(wid))
+    }
+  } catch (e) {
+    // 실패 시 롤백
+    if (already) store.ids.add(hotelId)
+    else store.ids.delete(hotelId)
+    throw e
+  } finally {
+    store.busy = false
+  }
 }

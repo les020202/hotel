@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,7 +18,8 @@ public class OwnerInventoryService {
     private final BookingDayRepository repo;
 
     @Transactional(readOnly = true)
-    public List<InventoryDayDto> getInventory(String loginId, Long hotelId, Long roomTypeId, LocalDate from, LocalDate to) {
+    public List<InventoryDayDto> getInventory(String loginId, Long hotelId, Long roomTypeId,
+                                              LocalDate from, LocalDate to) {
         guard.checkAccess(loginId, hotelId);
         List<BookingDay> list = repo.findRange(hotelId, roomTypeId, from, to);
         return list.stream().map(this::toDto).collect(Collectors.toList());
@@ -32,15 +32,14 @@ public class OwnerInventoryService {
 
         int changed = 0;
 
-        // 전통 for-loop: 람다 내부에서 changed를 참조/수정하지 않음
         for (LocalDate d = cmd.from(); !d.isAfter(cmd.to()); d = d.plusDays(1)) {
             if (!matchesWeekday(d, cmd.weekdays())) continue;
 
-            // 🔧 람다(orElseGet) 제거 → if-else로 대체
-            Optional<BookingDay> opt = repo.findForUpdate(hotelId, cmd.roomTypeId(), d);
+            // ✅ 단일 날짜를 checkIn=d, checkOut=d+1 로 조회
+            List<BookingDay> rows = repo.findForUpdate(hotelId, cmd.roomTypeId(), d, d.plusDays(1));
             BookingDay row;
-            if (opt.isPresent()) {
-                row = opt.get();
+            if (!rows.isEmpty()) {
+                row = rows.get(0);
             } else {
                 row = new BookingDay(hotelId, cmd.roomTypeId(), d);
             }
@@ -65,8 +64,7 @@ public class OwnerInventoryService {
 
     private boolean matchesWeekday(LocalDate d, Set<Integer> weekdays) {
         if (weekdays == null || weekdays.isEmpty()) return true;
-        // ISO: 1=Mon ... 7=Sun
-        int iso = d.getDayOfWeek().getValue();
+        int iso = d.getDayOfWeek().getValue(); // 1=Mon ... 7=Sun
         return weekdays.contains(iso);
     }
 
@@ -87,8 +85,11 @@ public class OwnerInventoryService {
                 b.getBooked(),
                 b.getPrice(),
                 b.getStatus().name(),
-                Optional.ofNullable(b.getRemainingQty()).orElse( Math.max(b.getAllotment() - b.getBooked(), 0) ),
-                Optional.ofNullable(b.getSellable()).orElse( (b.getStatus()==BookingDayStatus.OPEN) && (b.getAllotment() - b.getBooked() > 0) )
+                Optional.ofNullable(b.getRemainingQty())
+                        .orElse(Math.max(b.getAllotment() - b.getBooked(), 0)),
+                Optional.ofNullable(b.getSellable())
+                        .orElse((b.getStatus() == BookingDayStatus.OPEN) &&
+                                (b.getAllotment() - b.getBooked() > 0))
         );
     }
 }

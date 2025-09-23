@@ -44,9 +44,14 @@ public class User {
 
     // 커버 기본 이미지 템플릿
     public enum CoverTpl { C1, C2, C3 }
+
+
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+
     // PK, AUTO_INCREMENT
 
     @Column(nullable = false, length = 191, unique = true)

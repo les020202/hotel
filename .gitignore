@@ -6,4 +6,8 @@
 .env
 backend/src/main/resources/application.properties
 backend/src/test/resources/application.properties
-
+node_modules/
+dist/
+.env
+backend/target/
+backend/.env

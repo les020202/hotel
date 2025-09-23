@@ -141,7 +141,8 @@ function goDetail(h) {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 3rem;            /* 카드 사이 여유 */
+  gap: 3rem;  
+  align-items: center;
 }
 
 /* 카드 기본 */
@@ -154,6 +155,7 @@ function goDetail(h) {
   width: 100%;
   box-sizing: border-box;
   overflow: hidden;
+  margin: 0 auto; 
 }
 .hotel-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.08); }
 
