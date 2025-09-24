@@ -37,7 +37,6 @@ public class HotelDetailsRepository {
 
     /* ---------- SQLs ---------- */
 
-
     // 호텔 기본(전화/위도/경도 포함)
     private static final String HOTEL_SQL = """
         SELECT h.id, h.name, h.region, h.address, h.rating, h.grade_level, h.cover_image_url,
@@ -80,7 +79,6 @@ public class HotelDetailsRepository {
         ORDER BY sort_order ASC, id ASC
     """;
 
-
     // ✅ 호텔별 어메니티 (amenity_id는 amenities.id와 조인)
     private static final String AMENITIES_SQL = """
         SELECT a.code, a.name
@@ -115,13 +113,12 @@ public class HotelDetailsRepository {
         h.setLongitude(nDouble(hrow[9]));
 
         // 2) 룸타입 오퍼
-
         @SuppressWarnings("unchecked")
         List<Object[]> rows = em.createNativeQuery(ROOMTYPE_SQL)
                 .setParameter("hid", hotelId)
                 .setParameter("ci", Date.valueOf(ci))
                 .setParameter("co", Date.valueOf(co))
-                .setParameter("guests", Math.max(1, guests))  // ✅ 최소 1 보정
+                .setParameter("guests", Math.max(1, guests))
                 .getResultList();
 
         List<HotelDetailsDto.RoomTypeOffer> types = new ArrayList<>(rows.size());
@@ -129,7 +126,12 @@ public class HotelDetailsRepository {
             HotelDetailsDto.RoomTypeOffer t = new HotelDetailsDto.RoomTypeOffer();
             t.setRoomTypeId(nLong(r[0]));
             t.setName((String) r[1]);
+            t.setCapacity(nInt(r[2]));
             t.setAreaSqm(nInt(r[3]));
+            t.setMinRemaining(nInt(r[4]));
+            t.setPriceSum(nLong(r[5]));
+            t.setNights(nInt(r[6]));
+            t.setTemplateImageUrl((String) r[7]);
             types.add(t);
         }
 
@@ -149,6 +151,7 @@ public class HotelDetailsRepository {
         HotelDetailsDto.Gallery g = new HotelDetailsDto.Gallery();
         g.setCover(cover);
         g.setRoomDefaults(defaultImages);
+
         // 4) 어메니티
         @SuppressWarnings("unchecked")
         List<Object[]> amenRows = em.createNativeQuery(AMENITIES_SQL)
@@ -164,17 +167,11 @@ public class HotelDetailsRepository {
         }
 
         // 5) 조립
-
         HotelDetailsDto dto = new HotelDetailsDto();
         dto.setHotel(h);
         dto.setGallery(g);
         dto.setRoomTypes(types);
-        dto.setAmenities(List.of());
+        dto.setAmenities(amens);   // ← 필수! (빈 리스트로 덮어쓰지 말 것)
         return dto;
-    }
-
-    public boolean existsById(Long id) {
-        // TODO Auto-generated method stub
-        return false;
     }
 }

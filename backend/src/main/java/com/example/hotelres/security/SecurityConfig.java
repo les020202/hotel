@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/payments/toss/confirm").permitAll()
                 .requestMatchers("/payments/toss/**").permitAll()
                 .requestMatchers("/api/reservations/hold/**").permitAll() // 단건 조회는 누구나 가능
+                    .requestMatchers(HttpMethod.GET, "/api/reservations/holds/**").permitAll()
                 .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN") // 운영 전용은 잠그고
                 .requestMatchers("/api/coupons/**").authenticated()
                 .anyRequest().authenticated()

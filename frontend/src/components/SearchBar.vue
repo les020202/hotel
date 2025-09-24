@@ -1,6 +1,5 @@
 <script setup>
 import { ref, reactive, computed, nextTick, watch } from "vue";
-import { useRouter } from "vue-router";
 import DestinationInput from "@/components/DestinationInput.vue";
 import RangeCalendar from "@/components/RangeCalendar.vue";
 import GuestsPopover from "@/components/GuestsPopover.vue";
@@ -87,13 +86,6 @@ function onGuestsConfirm(){
 // CTA 클릭할 때만 검색 실행
 function onClickSearch(){
   emit("submit", payload());
-
-  /* Enter 키로도 검색 */
-function onKeydown(e){
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    onClickSearch();
-  }
 }
 
 const dateLabel = computed(() => {
@@ -104,11 +96,11 @@ const dateLabel = computed(() => {
   };
   return `${f(checkIn.value)} – ${f(checkOut.value)}`;
 });
-const peopleLabel = computed(() => `성인 ${adults.value}명 · 아동 ${children.value}명`);}
+const peopleLabel = computed(() => `성인 ${adults.value}명 · 아동 ${children.value}명`);
 </script>
 
 <template>
-  <div class="bar" @keydown="onKeydown">
+  <div class="bar">
     <!-- 1) 목적지 / 호텔 -->
     <div class="cell cell--wide" @click="focusDest">
       <DestinationInput
@@ -158,7 +150,7 @@ const peopleLabel = computed(() => `성인 ${adults.value}명 · 아동 ${childr
     </div>
 
     <!-- CTA -->
-    <button type="button" class="cta" @click="onClickSearch">검색하기</button>
+    <button class="cta" @click="onClickSearch">검색하기</button>
   </div>
 </template>
 

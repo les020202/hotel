@@ -72,5 +72,5 @@ public class ReservationController {
         log.info("[HOLD][RELEASE-EXPIRED] released={}", released);
         return ResponseEntity.ok(released);
     }
-    
+
 }

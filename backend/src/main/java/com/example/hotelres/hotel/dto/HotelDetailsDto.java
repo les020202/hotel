@@ -19,7 +19,6 @@ public class HotelDetailsDto {
         private Double rating;
         private Integer gradeLevel;
         private String coverImageUrl; // 필요 시
-
         private String phone;
         private Double latitude;
         private Double longitude;
