@@ -178,6 +178,9 @@ const router = createRouter({
         // 두 파일에 있던 Payment / AddCard 라우트도 추가
         { path: 'payment', component: Payment },
         { path: 'add-card', component: AddCard },
+        { path: 'bookings', name: 'MyBookings', component: () => import('@/views/mypage/MyBookings.vue') },
+    { path: 'bookings/:id', name: 'MyBookingDetail', component: () => import('@/views/mypage/MyBookingDetail.vue'), props: true },
+        
       ]
     },
 
