@@ -20,6 +20,9 @@ import FindPasswordView from '@/views/FindPasswordView.vue'
 import SearchView from '@/views/SearchView.vue'
 import HotelDetailView from '@/views/HotelDetailView.vue'
 
+//호텔 등록
+import HotelApply from '@/views/HotelApply.vue'
+
 // 마이페이지
 import MyPage from '@/views/mypage/MyPage.vue'
 import Account from '@/views/mypage/Account.vue'
@@ -133,6 +136,14 @@ const router = createRouter({
   component: () => import('@/views/reservation/PaymentSuccess.vue'),
   meta: { public: true },
 },
+
+{ 
+  path: '/hotelapply', 
+  name: 'HotelApply', 
+  component: HotelApply, 
+  meta: { public: true } 
+},
+
 {
   path: '/reservation/fail',
   name: 'PayFail',
