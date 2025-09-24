@@ -1,37 +1,79 @@
 package com.example.hotelres.admin.hotel;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.*;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AdminHotelService {
-  private final HotelRepository hotelRepo;
 
-  public Page<Hotel> list(String region, String q, int page, int size) {
-    String rg = region == null ? "" : region.trim();
-    String qq = q == null ? "" : q.trim();
-    int p = Math.max(page, 0);
-    int s = Math.min(Math.max(size, 1), 2000); // 안전 상한
-    return hotelRepo.search(rg, qq, PageRequest.of(p, s));
-  }
+    private final HotelRepository hotelRepo;
+    private final JdbcTemplate jdbc;   // ✅ 자식 테이블 네이티브 삭제용
 
-  @Transactional
-  public Hotel update(Long id, Hotel patch) {
-    Hotel h = hotelRepo.findById(id).orElseThrow();
-    if (patch.getName()   != null) h.setName(patch.getName());
-    if (patch.getRegion() != null) h.setRegion(patch.getRegion());
-    if (patch.getAddress()!= null) h.setAddress(patch.getAddress());
-    if (patch.getPhone()  != null) h.setPhone(patch.getPhone());
-    return hotelRepo.save(h);
-  }
+    /* 목록 */
+    @Transactional(readOnly = true)
+    public Page<HotelDtos.ListItem> list(String region, String q, int page, int size){
+        var pageable = PageRequest.of(Math.max(page,0), Math.max(size,1));
+        return hotelRepo.search(region, q, pageable).map(HotelDtos.ListItem::from);
+    }
 
-  @Transactional
-  public void delete(Long id) {
-    // 의존 데이터가 있으면 FK 제약/트리거로 409 나갈 수 있음 → 서비스에서 잡아 409로 변환해도 됨
-    hotelRepo.deleteById(id);
-  }
+    /* 상세 */
+    @Transactional(readOnly = true)
+    public HotelDtos.Detail detail(Long id){
+        var h = hotelRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return HotelDtos.Detail.from(h);
+    }
+
+    /* 수정 */
+    @Transactional
+    public void update(Long id, HotelDtos.UpdateReq req){
+        var h = hotelRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+        if (req.name() != null)       h.setName(req.name());
+        if (req.region() != null)     h.setRegion(req.region());
+        if (req.address() != null)    h.setAddress(req.address());
+        if (req.phone() != null)      h.setPhone(req.phone());
+        if (req.homepageUrl() != null)h.setHomepageUrl(req.homepageUrl());
+
+        hotelRepo.save(h);
+    }
+
+    /* 삭제: 예약 있으면 409, 없으면 자식부터 정리 후 호텔 삭제 */
+    @Transactional
+    public void delete(Long id){
+        if (!hotelRepo.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
+        // 1) 예약 존재 여부 (있으면 409)
+        Integer hasBooking = jdbc.queryForObject(
+            "SELECT CASE WHEN COUNT(*)>0 THEN 1 ELSE 0 END FROM bookings WHERE hotel_id=?",
+            Integer.class, id
+        );
+        if (hasBooking != null && hasBooking == 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "해당 호텔에 예약 내역이 있어 삭제할 수 없습니다.");
+        }
+
+        // 2) 자식 테이블 정리 (참조 순서 주의)
+        jdbc.update("DELETE FROM booking_day  WHERE hotel_id=?", id);
+        jdbc.update("DELETE FROM rate_plans   WHERE hotel_id=?", id);
+        jdbc.update("DELETE FROM room_types   WHERE hotel_id=?", id);
+        jdbc.update("DELETE FROM hotel_owners WHERE hotel_id=?", id);
+
+        // 3) 마지막으로 호텔 삭제
+        try {
+            hotelRepo.deleteById(id);
+        } catch (EmptyResultDataAccessException ignore) {
+            // 이미 없어도 조용히 무시
+        }
+    }
 }

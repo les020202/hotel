@@ -1,20 +1,20 @@
 // src/main/java/com/example/hotelres/admin/hotel/Hotel.java
 package com.example.hotelres.admin.hotel;
 
-import java.math.BigDecimal;
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "hotels")
+@Table(name = "hotels")  // ★ 중요: 실제 테이블명과 맞추기
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Hotel {
 
-    @Id 
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, length = 100)
@@ -28,6 +28,7 @@ public class Hotel {
 
     @Column(length = 50)
     private String phone;
+
 
     /** 호텔 평점 (예: 4.5) */
     @Column(precision = 2, scale = 1) // DECIMAL(2,1)
@@ -73,4 +74,22 @@ public class Hotel {
     // --- Enum 정의 ---
     public enum CoverImageType { NONE, UPLOADED, TEMPLATE }
     public enum CoverImageTemplate { DEFAULT, BEACH, CITY }
+
+    
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    void prePersist() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (updatedAt == null) updatedAt = createdAt;
+    }
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+
 }
