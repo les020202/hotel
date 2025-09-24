@@ -113,10 +113,38 @@ const router = createRouter({
       })
     },
 
-    // 예약/결제 콜백은 비로그인 허용
-    { path: '/reservation', component: ReservationPage },
-    { path: '/pay/success', name: 'PaySuccess', component: PaymentSuccess },
-    { path: '/pay/fail', name: 'PayFail', component: PaymentFail },
+    // (router/index.js 안의 routes 배열에서 예약/결제 부분만 교체)
+
+// 예약/결제 (콜백은 비로그인 허용)
+{
+  path: '/reservation',
+  // ⚠️ 이 파일만 지연 로딩으로 바꿔 순환 의존 깨기
+  component: () => import('@/views/reservation/ReservationPage.vue'),
+},
+{
+  path: '/reservation/success',
+  name: 'PaySuccess',
+  component: () => import('@/views/reservation/PaymentSuccess.vue'),
+  meta: { public: true },
+},
+{
+  path: '/reservation/fail',
+  name: 'PayFail',
+  component: () => import('@/views/reservation/PaymentFail.vue'),
+  meta: { public: true },
+},
+
+// Toss가 호출하는 짧은 콜백 URL도 받기 (동일 컴포넌트로 연결)
+{
+  path: '/pay/success',
+  component: () => import('@/views/reservation/PaymentSuccess.vue'),
+  meta: { public: true },
+},
+{
+  path: '/pay/fail',
+  component: () => import('@/views/reservation/PaymentFail.vue'),
+  meta: { public: true },
+},
 
     // 관리자 (ROLE_ADMIN)
     {
@@ -202,7 +230,7 @@ router.beforeEach((to, from, next) => {
 
   const token = localStorage.getItem('token')
   const isPublic = to.meta?.public === true
-  const isPayCallback = to.path.startsWith('/pay/')
+ const isPayCallback = to.path.startsWith('/pay/') || to.path.startsWith('/reservation/')
 
   // 2) 인증 필요 라우팅
   if (!isPublic && !isPayCallback && to.meta.requiresAuth && !token) {

@@ -41,7 +41,7 @@ public class PaymentsOrchestrator {
      * @param holdCode   결제 대상 홀드 코드
      */
     @Transactional
-    public PaymentConfirmResponse confirmToss(String paymentKey, String orderId, int amount, String holdCode) {
+    public PaymentConfirmResponse confirmToss(String paymentKey, String orderId, long amount, String holdCode) {
         // 멱등 처리
         var existing = paymentRepository.findByProviderRef(paymentKey);
         if (existing.isPresent()) {
@@ -71,15 +71,21 @@ public class PaymentsOrchestrator {
             throw new ApiException("결제 금액 불일치(hold=" + expectedAmount + ", paid=" + res.totalAmount() + ")");
         }
 
-        // 4) 예약 확정
+     // 4) 예약 확정
+        int nights = 1;
+        if (hold.getCheckIn() != null && hold.getCheckOut() != null) {
+            long d = ChronoUnit.DAYS.between(hold.getCheckIn(), hold.getCheckOut());
+            nights = (int) Math.max(1, d);   // 최소 1
+        }
+
         BookingEntity booking = new BookingEntity();
         booking.setUserId(hold.getUserId());
         booking.setHotelId(hold.getHotelId());
         booking.setCheckIn(hold.getCheckIn());
         booking.setCheckOut(hold.getCheckOut());
-        booking.setNights((int) ChronoUnit.DAYS.between(hold.getCheckIn(), hold.getCheckOut()));
+        booking.setNights(nights);                 // ✅ 기존: between(...) 바로 대입 → nights 사용
         booking.setGuests(hold.getGuests());
-        booking.setTotalAmount(res.totalAmount());  // PG 승인금액
+        booking.setTotalAmount(res.totalAmount());
         booking.setCurrency(hold.getCurrency());
         booking.setVoucherNo(orderId);
         booking.setStatus(BookingStatus.CONFIRMED);
@@ -90,10 +96,10 @@ public class PaymentsOrchestrator {
                 .booking(booking)
                 .roomTypeId(hold.getRoomTypeId())
                 .ratePlanId(hold.getRatePlanId())
-                .priceTotal(hold.getTotalAmount()) // 필요 시 roomSubtotal로 교체 가능
+                .quantity(nights)                        // ✅ 반드시 채우기! (NULL 금지)
+                .priceTotal(hold.getTotalAmount())       // 필요하면 roomSubtotal()로 교체
                 .build();
         bookingItemRepository.save(item);
-
         // 6) 결제 저장
         Payment p = new Payment();
         p.setBookingId(booking.getId());

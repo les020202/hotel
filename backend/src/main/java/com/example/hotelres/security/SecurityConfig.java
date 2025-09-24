@@ -97,7 +97,9 @@ public class SecurityConfig {
                 // 기본적으로 모든 다른 요청은 인증 필요
                 .requestMatchers("/api/time").permitAll()
                 .requestMatchers("/reservation/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/payments/toss/confirm").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/confirm").permitAll()   // ★ 추가
+                .requestMatchers(HttpMethod.GET, "/api/payments/success-bridge").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/confirm").permitAll()
                 .requestMatchers("/payments/toss/**").permitAll()
                 .requestMatchers("/api/reservations/hold/**").permitAll() // 단건 조회는 누구나 가능
                     .requestMatchers(HttpMethod.GET, "/api/reservations/holds/**").permitAll()

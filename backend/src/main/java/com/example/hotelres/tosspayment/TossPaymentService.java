@@ -29,7 +29,7 @@ public class TossPaymentService {
         return new RestTemplate(factory);
     }
 
-    public TossConfirmResponse confirm(String paymentKey, String orderId, int amount) {
+    public TossConfirmResponse confirm(String paymentKey, String orderId, long amount) {
         log.info("Toss Confirm 요청: paymentKey={}, orderId={}, amount={}", paymentKey, orderId, amount);
 
         // ✅ record 접근자 사용

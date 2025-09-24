@@ -82,17 +82,29 @@ const remainText = computed(() => {
 })
 
 /* ---------------------- Leave page: cancel hold ---------------------- */
+/* ---------------------- Leave page: cancel hold ---------------------- */
 onBeforeRouteLeave(async (to, from, next) => {
   if (!holdCode.value) return next();
-  const goingToResult =
-    ['/reservation/payment-success', '/reservation/payment-fail', '/reservation/success', '/reservation/fail']
-      .includes(to.path);
-  if (goingToResult) return next();
 
-  if (!confirm('이 페이지를 떠나면 예약 홀드가 취소됩니다. 계속 이동할까요?')) return next(false);
+  // 1) 라우트 이름으로 체크 (있으면 이게 제일 안전)
+  const okByName = ['PaySuccess', 'PayFail', 'ReservationSuccess', 'ReservationFail']
+    .includes(to?.name);
+
+  // 2) 경로로 체크 (이름이 없는 경우 대비)
+  const okByPath = [
+    '/pay/success', '/pay/fail',
+    '/reservation/success', '/reservation/fail',
+    '/reservation/payment-success', '/reservation/payment-fail'
+  ].includes(to?.path);
+
+  if (okByName || okByPath) return next();
+
+  if (!confirm('이 페이지를 떠나면 예약 홀드가 취소됩니다. 계속 이동할까요?')) {
+    return next(false);
+  }
   try { await cancelReservationHold(holdCode.value) } catch (e) { console.error(e) }
   next();
-})
+});
 
 async function cancelHold() {
   if (!holdCode.value) return
@@ -321,7 +333,7 @@ async function requestPay() {
 
     // ✅ 1) 서버에서 홀드 최신 금액 다시 확인
     try {
-      const { data } = await api.get(`/reservations/holds/${holdCode.value}`)
+      const { data } = await api.get(`/reservations/hold/${holdCode.value}`)
       if (data && data.totalAmount != null) {
         quotedTotal.value = Number(data.totalAmount)
         holdExpiresAt.value = data.expiresAt
@@ -351,8 +363,8 @@ async function requestPay() {
     await paymentWidget.value.requestPayment({
       orderId: genOrderId(),
       orderName: '호텔 예약',
-      successUrl: `${window.location.origin}/reservation/success?${extra}`,
-      failUrl:    `${window.location.origin}/reservation/fail`,
+      successUrl: `${window.location.origin}/pay/success?${extra}`,
+      failUrl:    `${window.location.origin}/pay/fail`,
       customerName: guest.name || '예약고객',
       customerMobilePhone: guest.phone.replace(/\D/g, ''),
       customerEmail: 'guest@example.com',
