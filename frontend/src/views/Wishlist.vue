@@ -19,7 +19,7 @@
           :disabled="loading"
           @click="reload"
         >
-          새로고침
+          {{ loading ? '로딩중…' : '새로고침' }}
         </button>
       </div>
 
@@ -90,7 +90,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchWishlist, deleteWishlist } from '@/api/wishlistApi.js'
+import {
+  fetchWishlist,
+  deleteWishlist,          // PK 기반 삭제 (폴백)
+  deleteWishlistByHotel,  // 호텔ID 기반 삭제 (우선)
+} from '@/api/wishlistApi.js'
+import { getMe } from '@/api/auth'
 
 const router = useRouter()
 
@@ -113,20 +118,32 @@ async function loadPage(offset = 0, append = false) {
   loading.value = true
   err.value = ''
   try {
+    // 로그인 확인 (401이면 로그인으로)
+    try {
+      await getMe()
+    } catch {
+      router.push({ path: '/login', query: { redirect: '/wishlist' } })
+      return
+    }
+
     const res = await fetchWishlist({ limit, offset })
-    if (append) items.value.push(...(res.items || []))
-    else items.value = res.items || []
-    total.value = res.total ?? 0
-    hasMore.value = !!res.hasMore
-    nextOffset.value = res.nextOffset ?? (offset + (res.items?.length || 0))
+    const list = res?.items ?? []
+
+    if (append) items.value = items.value.concat(list)
+    else items.value = list
+
+    total.value = res?.total ?? (append ? total.value : list.length)
+    hasMore.value = !!res?.hasMore
+    nextOffset.value = res?.nextOffset ?? (offset + list.length)
   } catch (e) {
     err.value = e?.response?.data?.message || e?.message || '조회 실패'
   } finally {
     loading.value = false
   }
 }
+
 function reload(){ loadPage(0, false) }
-function loadMore(){ loadPage(nextOffset.value, true) }
+function loadMore(){ if (!loading.value) loadPage(nextOffset.value, true) }
 
 function coverOf(it) {
   return it?.hotel?.coverImageUrl || '/images/hotel/placeholder.jpg'
@@ -154,31 +171,34 @@ function goDetail(hotelId) {
   })
 }
 
-// 찜 삭제
+// ✅ 찜 삭제: 확인 다이얼로그 + 호텔ID 우선 삭제 + 항상 reload()
 async function onRemove(it) {
-  if (!confirm('해당 호텔을 찜 목록에서 삭제할까요?')) return
+  if (!it) return
+  const ok = confirm('해당 호텔을 찜 목록에서 삭제하시겠습니까?')
+  if (!ok) return
+
+  const hotelId = it?.hotel?.id
+  const wishlistId = it?.wishlistId
+
   try {
-    await deleteWishlist(it.wishlistId)
-    items.value = items.value.filter(x => x.wishlistId !== it.wishlistId)
-    total.value = Math.max(0, (total.value || 0) - 1)
-    if (items.value.length < limit && hasMore.value) {
-      await loadMore()
+    if (hotelId) {
+      await deleteWishlistByHotel(hotelId)
+    } else if (wishlistId) {
+      await deleteWishlist(wishlistId)
     }
   } catch (e) {
-    alert(e?.response?.data?.message || '삭제 실패')
+    // 폴백: PK로 재시도
+    if (wishlistId) {
+      try { await deleteWishlist(wishlistId) } catch {}
+    }
+  } finally {
+    await reload() // 서버 진실과 동기화
   }
 }
 
-onMounted(async () => {
-  try {
-    items.value = await getWishlist()   // ✅ GET /api/my/wishlist
-  } catch (e) {
-    if (e?.response?.status === 401) {
-      router.push({ path: '/login', query: { redirect: '/wishlist' } })
-    } else {
-      console.error(e)
-    }
-  }
+onMounted(() => {
+  // ✅ 초기 진입 즉시 로드 → “새로고침 눌러야 보임” 문제 해결
+  reload()
 })
 </script>
 

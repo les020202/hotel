@@ -11,7 +11,7 @@
       <div class="hotel-row">
         <!-- 좌측: 이미지 -->
         <figure class="img-wrap">
-          <img :src="h.coverImageUrl || placeholder" alt="" class="img" loading="lazy" />
+          <img :src="safeImg(h.coverImageUrl) || placeholder" alt="" class="img" loading="lazy" />
           <span class="badge">12 images</span>
         </figure>
 
@@ -42,7 +42,7 @@
 
           <div class="rating-line">
             <div class="rating-box">
-              {{ h.rating != null ? h.rating.toFixed(1) : '—' }}
+              {{ h.rating != null ? Number(h.rating).toFixed(1) : '—' }}
             </div>
             <div class="rating-label">{{ ratingLabel(h.rating) }}</div>
           </div>
@@ -50,7 +50,7 @@
           <div class="cta" @click.stop>
             <button
               class="wish"
-              @click="toggleWish(h)"
+              @click="onToggle(h.hotelId)"
               :aria-pressed="isWished(h.hotelId)"
               :title="isWished(h.hotelId) ? '위시리스트 제거' : '위시리스트 추가'"
             >
@@ -74,23 +74,37 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { addWishlist, removeWishlist } from '@/api/wishlistApi.js'
+
+// ✅ 전역 위시리스트 상태/헬퍼 사용
+//  - ensureWishlistLoaded: 로그인 시 서버에서 전체 위시 상태 1회 동기화
+//  - isWished(hotelId): 전역 Set 기반으로 하트 색상 판정
+//  - toggleWishlist(hotelId): 호텔ID 기준으로 POST/DELETE (by-hotel 우선)
+import {
+  ensureWishlistLoaded,
+  isWished as isWishedHotel,
+  toggleWishlist,
+  syncHotels
+} from '@/api/wishlistApi'
+
+// 로그인 확인용 (미로그인일 때 로그인 페이지로 이동)
+import { getMe } from '@/api/auth'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
   checkIn: { type: String, default: null },
   checkOut: { type: String, default: null },
-  guests: { type: Number, default: 1 }        // ✅ 추가: 인원 값을 부모로부터 받음
+  guests: { type: Number, default: 1 }
 })
 
 const router = useRouter()
-const wished = ref(new Set())
 const placeholder = 'https://placehold.co/800x600?text=Hotel'
 
-const money = (v) => (v == null ? '-' : new Intl.NumberFormat('ko-KR').format(v))
+/* 금액 표시 */
+const money = (v) => (v == null ? '-' : new Intl.NumberFormat('ko-KR').format(Number(v)))
 
+/* 평점 라벨 */
 const ratingLabel = (r) => {
   if (r == null) return ''
   const x = Number(r)
@@ -103,26 +117,39 @@ const ratingLabel = (r) => {
   return 'bad'
 }
 
-const isWished = (id) => wished.value.has(id)
+/* 이미지 세이프 */
+function safeImg(u){
+  if (!u || typeof u !== 'string') return placeholder
+  if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('/')) return u
+  return placeholder
+}
 
-async function toggleWish(h) {
+/* 전역 store 기반 상태 조회 */
+function isWished(hotelId) {
+  return isWishedHotel(hotelId)
+}
+
+/* 하트 토글(알림/토스트 없음) */
+async function onToggle(hotelId) {
   try {
-    if (isWished(h.hotelId)) {
-      await removeWishlist(h.hotelId)
-      wished.value.delete(h.hotelId)
-    } else {
-      await addWishlist(h.hotelId)
-      wished.value.add(h.hotelId)
-    }
+    await getMe() // 미로그인 시 401 → catch
+  } catch {
+    const redirect = encodeURIComponent(location.pathname + location.search)
+    router.push(`/login?redirect=${redirect}`)
+    return
+  }
+  try {
+    await toggleWishlist(hotelId) // 내부에서 낙관적 UI + 실패 시 롤백
   } catch (e) {
+    // 네트워크/서버 오류는 콘솔만
     console.error('wishlist error', e)
   }
 }
 
-// ✅ 상세 이동 시 /search에서 선택한 checkIn/checkOut/guests를 그대로 전달
+/* 상세로 이동 (search에서 받은 파라미터 그대로 전달) */
 function goDetail(h) {
   router.push({
-    name: 'hotel-detail',                // name 사용 권장(라우트 변경에도 안전)
+    name: 'hotel-detail',
     params: { id: h.hotelId },
     query: {
       checkIn: props.checkIn,
@@ -131,6 +158,14 @@ function goDetail(h) {
     }
   })
 }
+
+/* 초기 진입 시: 로그인 상태면 위시 동기화 → 처음부터 빨간 하트 표시 */
+onMounted(async () => {
+  await ensureWishlistLoaded()
+  // 현재 목록에 보이는 호텔들만 빠르게 동기화하고 싶다면 추가:
+  const ids = (props.items || []).map(it => it.hotelId).filter(Boolean)
+  if (ids.length) await syncHotels(ids)
+})
 </script>
 
 <style scoped>
