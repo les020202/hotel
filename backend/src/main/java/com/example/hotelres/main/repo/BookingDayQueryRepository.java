@@ -42,4 +42,22 @@ public interface BookingDayQueryRepository extends JpaRepository<BookingDayEntit
     """)
     List<Object[]> findCheapestHotelIds(@Param("today") LocalDate today,
                                         @Param("open") Status open);
+    
+    /* 카드(호텔 기본정보 + 최저가) */
+    @Query("""
+       select h.id as id,
+              h.name as name,
+              h.address as address,
+              h.coverImageUrl as coverImageUrl,
+              min(b.price) as minPrice
+         from BookingDayEntity b
+         join b.hotel h
+        where b.stayDate >= :today
+          and b.status = :open
+          and (b.isSellable is null or b.isSellable = true)
+        group by h.id, h.name, h.address, h.coverImageUrl
+        order by minPrice asc
+    """)
+    List<Object[]> findRecommendedHotelCardRows(@Param("today") LocalDate today,
+                                                @Param("open") Status open);
 }

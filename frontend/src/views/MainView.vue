@@ -93,6 +93,36 @@ async function logout () {
 function goMyPage () { router.push('/mypage') }
 function checkToken () { fetchMe() }
 
+/* 검색 이동 헬퍼 */
+function isoToday () {
+  return new Date().toISOString().slice(0,10)
+}
+function isoPlusDays (n) {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return d.toISOString().slice(0,10)
+}
+
+/* SearchBar에서 submit 이벤트 받을 때 호출 */
+function goSearch (p) {
+  const chosenCheckIn  = p?.checkIn  || checkIn.value  || isoToday()
+  const chosenCheckOut = p?.checkOut || checkOut.value || isoPlusDays(1)
+  const text = (p?.q ?? q.value ?? '').trim()
+  const guestsVal = p?.adults ?? adults.value ?? 1
+
+  router.push({
+    path: '/search',
+    query: {
+      checkIn:  chosenCheckIn,
+      checkOut: chosenCheckOut,
+      guests:   guestsVal,
+      region:   text,
+      q:        text,
+      offset:   0
+    }
+  })
+}
+
 /* 기존 핸들러 유지(콘솔 출력) */
 function doSearch (p) {
   console.log('검색 조건:', p || { q: q.value, checkIn: checkIn.value, checkOut: checkOut.value, adults: adults.value, children: children.value, rooms: rooms.value })
@@ -128,7 +158,7 @@ function doSearch (p) {
       v-model:adults="adults"
       v-model:children="children"
       v-model:rooms="rooms"
-      @search="doSearch"
+      @submit="goSearch"
       class="mt-8"
     />
 

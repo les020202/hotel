@@ -79,20 +79,39 @@ public class HotelQueryService {
 
         Map<Long,Integer> out = new HashMap<>();
         for (Object[] r : rows) {
-            out.put((Long) r[0], (Integer) r[1]); // price가 BigDecimal이면 캐스팅 수정 필요
+            Long hotelId  = ((Number) r[0]).longValue();   // ✅ 안전 캐스팅
+            Integer price = ((Number) r[1]).intValue();    // ✅ BigDecimal/Long 등 커버
+            out.put(hotelId, price);
         }
         return out;
     }
 
-    /** 추천 호텔 목록 */
+    /** 추천 호텔 목록(id/minPrice) */
     public List<Map<String,Object>> getRecommended(int limit) {
         var rows = bookingDayQueryRepository.findCheapestHotelIds(LocalDate.now(), Status.OPEN);
         List<Map<String,Object>> resp = new ArrayList<>();
         for (int i=0; i<rows.size() && i<limit; i++) {
             Object[] r = rows.get(i);
             Map<String,Object> m = new LinkedHashMap<>();
-            m.put("hotelId", (Long) r[0]);
-            m.put("minPrice", (Integer) r[1]);
+            m.put("hotelId", ((Number) r[0]).longValue()); // ✅ 안전 캐스팅
+            m.put("minPrice", ((Number) r[1]).intValue()); // ✅ 안전 캐스팅
+            resp.add(m);
+        }
+        return resp;
+    }
+    
+    /** ⬇️ 추가: 추천 카드(id, name, address, coverImageUrl, minPrice) */
+    public List<Map<String,Object>> getRecommendedCards(int limit) {
+        var rows = bookingDayQueryRepository.findRecommendedHotelCardRows(LocalDate.now(), Status.OPEN);
+        List<Map<String,Object>> resp = new ArrayList<>();
+        for (int i = 0; i < rows.size() && i < limit; i++) {
+            Object[] r = rows.get(i);
+            Map<String,Object> m = new LinkedHashMap<>();
+            m.put("id",            ((Number) r[0]).longValue());
+            m.put("name",          (String) r[1]);
+            m.put("address",       (String) r[2]);
+            m.put("coverImageUrl", (String) r[3]);
+            m.put("minPrice",      r[4] == null ? null : ((Number) r[4]).intValue());
             resp.add(m);
         }
         return resp;
