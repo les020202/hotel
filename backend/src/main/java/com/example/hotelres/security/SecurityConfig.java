@@ -105,6 +105,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/reservations/holds/**").permitAll()
                 .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN") // 운영 전용은 잠그고
                 .requestMatchers("/api/coupons/**").authenticated()
+                .requestMatchers("/api/hotelapp/**").authenticated()
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form.disable())

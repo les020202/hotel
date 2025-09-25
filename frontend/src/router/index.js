@@ -22,6 +22,7 @@ import HotelDetailView from '@/views/HotelDetailView.vue'
 
 //호텔 등록
 import HotelApply from '@/views/HotelApply.vue'
+import HotelApplyMine from '@/views/HotelApplyMine.vue'
 
 // 마이페이지
 import MyPage from '@/views/mypage/MyPage.vue'
@@ -137,13 +138,8 @@ const router = createRouter({
   meta: { public: true },
 },
 
-{ 
-  path: '/hotelapply', 
-  name: 'HotelApply', 
-  component: HotelApply, 
-  meta: { public: true } 
-},
-
+{ path: '/hotelapply', component: HotelApply, meta: { requiresAuth: true } },
+{ path: '/hotelapply/mine', component: HotelApplyMine, meta:{ requiresAuth:true } },
 {
   path: '/reservation/fail',
   name: 'PayFail',

@@ -1,6 +1,9 @@
+// com.example.hotelres.admin.hotelapp.HotelApplicationAuditService
 package com.example.hotelres.admin.hotelapp;
 
 import com.example.hotelres.hotelapp.HotelApplicationEntity;
+import com.example.hotelres.security.CustomUserDetails;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,55 +11,36 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 @Service
+@RequiredArgsConstructor
 public class HotelApplicationAuditService {
 
-    private final HotelApplicationAuditRepository repo;
+  private final HotelApplicationAuditRepository repo;
 
-    public HotelApplicationAuditService(HotelApplicationAuditRepository repo) {
-        this.repo = repo;
-    }
+  public Page<HotelApplicationEntity> list(String status, String q, int page, int size) {
+    var st = HotelApplicationEntity.Status.from(status);
+    var qq = (q == null || q.isBlank()) ? null : q.trim();
+    return repo.adminSearch(st, qq, PageRequest.of(page, size));
+  }
 
-    @Transactional(readOnly = true)
-    public Page<HotelApplicationEntity> list(String status, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
-        HotelApplicationEntity.Status st = HotelApplicationEntity.Status.from(status); // valueOf X
-        if (st == null) return repo.findAllByOrderByIdDesc(pageable);
-        return repo.findByStatusOrderByIdDesc(st, pageable);
-    }
+  public HotelApplicationEntity get(Long id) {
+    return repo.findById(id).orElse(null);
+  }
 
-    @Transactional(readOnly = true)
-    public HotelApplicationEntity get(Long id) {
-        return repo.findById(id).orElseThrow(() -> new IllegalArgumentException("not found: " + id));
-    }
+  @Transactional
+  public void approve(Long id, CustomUserDetails admin) {
+    var app = repo.findById(id).orElseThrow();
+    app.setStatus(HotelApplicationEntity.Status.APPROVED);
+    app.setReviewedBy(admin != null ? admin.getId() : null);
+    app.setReviewedAt(LocalDateTime.now());
+    app.setReviewMemo("APPROVED");
+  }
 
-    @Transactional
-    public HotelApplicationEntity markUnderReview(Long id, Long adminId, String memo) {
-        var e = get(id);
-        e.setStatus(HotelApplicationEntity.Status.UNDER_REVIEW);
-        e.setReviewedBy(adminId);
-        e.setReviewedAt(LocalDateTime.now());
-        e.setReviewMemo(memo);
-        return e;
-    }
-
-    @Transactional
-    public HotelApplicationEntity approve(Long id, Long adminId, String memo) {
-        var e = get(id);
-        e.setStatus(HotelApplicationEntity.Status.APPROVED);
-        e.setReviewedBy(adminId);
-        e.setReviewedAt(LocalDateTime.now());
-        e.setReviewMemo(memo);
-        // TODO: 필요시 hotels/room_types 생성 로직 연결
-        return e;
-    }
-
-    @Transactional
-    public HotelApplicationEntity reject(Long id, Long adminId, String memo) {
-        var e = get(id);
-        e.setStatus(HotelApplicationEntity.Status.REJECTED);
-        e.setReviewedBy(adminId);
-        e.setReviewedAt(LocalDateTime.now());
-        e.setReviewMemo(memo);
-        return e;
-    }
+  @Transactional
+  public void reject(Long id, String reason, CustomUserDetails admin) {
+    var app = repo.findById(id).orElseThrow();
+    app.setStatus(HotelApplicationEntity.Status.REJECTED);
+    app.setReviewedBy(admin != null ? admin.getId() : null);
+    app.setReviewedAt(LocalDateTime.now());
+    app.setReviewMemo(reason == null ? "" : reason.trim());
+  }
 }
