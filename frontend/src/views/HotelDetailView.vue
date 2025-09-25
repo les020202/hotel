@@ -134,7 +134,7 @@
           <div class="grid grid-cols-12 gap-4 md:gap-6">
             <div class="col-span-12 md:col-span-5">
               <div class="relative h-48 md:h-56 rounded-xl overflow-hidden bg-neutral-100">
-                <img :src="safeImg(t.templateImageUrl)" class="w-full h-full object-cover" alt="">
+                <img :src="safeImg(t.templateImageUrl)" class="w-full h-full object-cover" alt=""/>
               </div>
               <div class="mt-2 text-sm text-gray-600">
                 기준 {{ t.capacity }}인 · {{ t.areaSqm }}㎡ · {{ nights }}박
@@ -465,6 +465,8 @@ async function refetch(){
     offers.value    = res.roomTypes || []
     amenities.value = Array.isArray(res.amenities) ? res.amenities : []
     nights.value    = offers.value[0]?.nights || diffDays(ci.value, co.value) || 1
+    if (canShowMap.value) initMap()
+    ensureKakaoShare()
 
     // ✅ 현재 호텔 찜 상태 동기화 (새로고침 후에도 빨간 하트 유지)
     if (hotel.value?.id) await syncCurrentHotel(hotel.value.id)

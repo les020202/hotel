@@ -79,15 +79,15 @@
           <div class="value">{{ row.guests }}명</div>
 
           <div class="label">
-            <span class="ico" aria-hidden="true">🧾</span> 결제내역
+            <span class="ico" aria-hidden="true">🏨</span> 호텔 상세
           </div>
           <div class="value">
             <button
               class="link-as-btn"
               type="button"
-              @click="goPaySuccess(row.bookingId)"
+              @click="goHotelDetail(row)"
             >
-              결제내역 확인
+              View Place
             </button>
           </div>
         </section>
@@ -121,10 +121,30 @@ function toKStatus(st) {
   }
 }
 
-function goPaySuccess(bookingId) {
-  if (!bookingId) return
-  // 내부 결제 성공 페이지로 이동 (+ 필요 시 추가 파라미터 전달 가능)
-  router.push({ path: '/pay/success', query: { bookingId: String(bookingId) } })
+// ✅ /hotels/:id 로 이동 (checkIn/checkOut/adults 쿼리 포함)
+function goHotelDetail(r) {
+  if (!r) return
+  // 다양한 키에서 호텔 id 시도
+  const hid =
+    r.hotelsId ??
+    r.hotels_id ??
+    r.hotels?.id ??
+    r.hotelsIdRef ?? // 혹시 다른 이름을 썼을 수 있어 대비
+    null
+
+  if (!hid) {
+    console.warn('[예약상세] 호텔 ID를 찾을 수 없어 상세로 이동하지 않았습니다.', r)
+    return
+  }
+
+  const query = {
+    ...(r.checkIn ? { checkIn: r.checkIn } : {}),
+    ...(r.checkOut ? { checkOut: r.checkOut } : {}),
+    ...(r.guests ? { adults: String(r.guests) } : {}),
+  }
+
+  // 라우트 name이 없다면 path 사용이 가장 안전
+  router.push({ path: `/hotels/${hid}`, query })
 }
 
 async function load() {
