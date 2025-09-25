@@ -30,6 +30,7 @@ import Support from '@/views/mypage/Support.vue'
 import Payment from '@/views/mypage/Payment.vue'
 import AddCard from '@/views/mypage/AddCard.vue'
 
+
 // 고객지원 퍼블릭(사용자용) 하위 라우트
 import NoticeList from '@/views/support/NoticeList.vue'
 import NoticeDetail from '@/views/support/NoticeDetail.vue'
@@ -183,6 +184,7 @@ const router = createRouter({
         { path: 'add-card', component: AddCard },
         { path: 'bookings', name: 'MyBookings', component: () => import('@/views/mypage/MyBookings.vue') },
         { path: 'bookings/:id', name: 'MyBookingDetail', component: () => import('@/views/mypage/MyBookingDetail.vue'), props: true },
+        { path: 'bookings/:id/ticket', name: 'MyBookingTicket', component: () => import('@/views/mypage/MyBookingTicket.vue'), props: true },
       ]
     },
 

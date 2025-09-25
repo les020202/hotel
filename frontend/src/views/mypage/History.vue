@@ -1,15 +1,18 @@
-<!-- src/views/mypage/History.vue (교체) -->
+<!-- src/views/mypage/History.vue -->
 <template>
   <div class="history">
     <h2>예약내역</h2>
 
-    <!-- 필터/상태 -->
     <p v-if="loading" class="muted">불러오는 중…</p>
     <p v-else-if="!rows.length" class="muted">예약 내역이 없습니다.</p>
 
-    <!-- 리스트 -->
     <div class="list" v-else>
-      <div class="ticket" v-for="r in rows" :key="r.bookingId" @click="goDetail(r.bookingId)">
+      <div
+        class="ticket"
+        v-for="r in rows"
+        :key="r.bookingId"
+        @click="goDetail(r.bookingId)"
+      >
         <div class="left">
           <div class="icon">🏨</div>
           <div class="dates">
@@ -38,9 +41,9 @@
           <button
             class="btn"
             type="button"
-            :disabled="!r.receiptUrl"
-            @click="openReceipt(r.receiptUrl)"
-            title="영수증 열기"
+            :disabled="!r.ticketAvailable"
+            @click="openTicket(r.bookingId)"
+            title="티켓 보기 / 인쇄"
           >
             Download Ticket
           </button>
@@ -50,9 +53,12 @@
         </div>
       </div>
 
-      <!-- 페이지네이션: 더 보기 -->
       <div class="more">
-        <button class="btn wide" :disabled="loading || page >= totalPages - 1" @click="loadMore">
+        <button
+          class="btn wide"
+          :disabled="loading || page >= totalPages - 1"
+          @click="loadMore"
+        >
           {{ page < totalPages - 1 ? '더 보기' : '마지막 페이지입니다' }}
         </button>
       </div>
@@ -65,9 +71,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-// 이미 만들었다면 이걸 사용:
-// import { fetchMyBookings } from '@/api/myBookings'
-import { get } from '@/api/_http' // axios 래퍼(기존 프로젝트 스타일)
+import { get } from '@/api/_http'
 
 const router = useRouter()
 
@@ -75,7 +79,6 @@ const rows = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
 
-// 간단 페이지네이션 (Page<MyBookingSummary>)
 const page = ref(0)
 const size = ref(10)
 const totalPages = ref(1)
@@ -86,12 +89,12 @@ function fmtAmount(v, c) {
   return `${Number(v).toLocaleString('ko-KR')}${c === 'KRW' ? '원' : (c ? ` ${c}` : '')}`
 }
 function fmtDate(d) {
-  // 백엔드에서 'YYYY-MM-DD' 로 내려오게 해둔 버전이라 가볍게 표시
   if (!d) return ''
-  // 보기 좋게 로케일 변환
   const [y, m, day] = String(d).split('-').map(Number)
   const dt = new Date(y, (m ?? 1) - 1, day ?? 1)
-  return Number.isNaN(dt.getTime()) ? d : dt.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
+  return Number.isNaN(dt.getTime())
+    ? d
+    : dt.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 function toKStatus(st) {
   const s = String(st || '').toUpperCase()
@@ -102,9 +105,7 @@ function toKStatus(st) {
 }
 
 async function fetchPage(p, s) {
-  // 백엔드: GET /api/my/bookings?page={p}&size={s}
-  //  → Page<MyBookingSummary> 형태 ({ content, totalPages, totalElements, ... })
-  // 이미 fetchMyBookings가 있으면 그걸 쓰면 됨.
+  // GET /api/my/bookings?page={p}&size={s}
   return await get(`/my/bookings?page=${p}&size=${s}`)
 }
 
@@ -118,7 +119,11 @@ async function load(reset = false) {
     totalPages.value = Number(res?.totalPages ?? 1)
     totalElements.value = Number(res?.totalElements ?? content.length)
 
-    rows.value = reset ? content : rows.value.concat(content)
+    // 백엔드에서 r.receiptUrl 대신 "티켓 가능 여부" 플래그가 있다면 ticketAvailable로 매핑
+    rows.value = (reset ? content : rows.value.concat(content)).map(x => ({
+      ...x,
+      ticketAvailable: x.ticketAvailable ?? !!x.receiptUrl ?? true,
+    }))
   } catch (e) {
     console.error(e)
     errorMsg.value = e?.response?.data?.message || e.message || '불러오기 실패'
@@ -133,9 +138,8 @@ function loadMore() {
   load(false)
 }
 
-function openReceipt(url) {
-  if (!url) return
-  window.open(url, '_blank', 'noopener')
+function openTicket(id) {
+  router.push({ name: 'MyBookingTicket', params: { id } })
 }
 
 function goDetail(id) {
@@ -152,6 +156,8 @@ h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
 .error { color: #dc2626; margin-top: 10px; }
 
 .list { display: flex; flex-direction: column; gap: 10px; }
+
+/* 카드 레이아웃 */
 .ticket {
   display: grid;
   grid-template-columns: 1.5fr 1fr auto;
@@ -160,6 +166,7 @@ h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
   background: #fff;
   border-radius: 12px;
   padding: 12px 14px;
+  overflow: hidden; /* 전역 장식요소가 튀어나오는 것 방지 */
 }
 .left { display: flex; align-items: center; gap: 10px; }
 .icon { width: 44px; height: 44px; border-radius: 10px; background: #f1f5f9; display: grid; place-items: center; }
@@ -167,6 +174,8 @@ h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
 .dates .sub { color: #64748b; font-size: 12px; margin-top: 2px; }
 
 .mid { color: #374151; text-align: right; display:flex; flex-direction:column; gap:4px; }
+/* 혹시 전역 스타일에서 mid 영역에 바(gradient/progress)를 뿌리는 경우 무력화 */
+.mid, .ticket .mid * { background-image: none !important; }
 .mid .line { display:flex; justify-content: flex-end; gap:8px; color:#6b7280; }
 .mid .time { font-weight: 600; color:#111827; }
 .mid .amt { font-weight: 700; }
@@ -193,4 +202,14 @@ h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
 
 .more { display:flex; justify-content:center; margin-top:10px; }
 .btn.wide { min-width: 220px; }
+
+/* 혹시 전역 CSS에서 progress/meter 요소를 카드에 뿌린 경우 강제 제어 */
+.ticket progress,
+.ticket .progress,
+.ticket .meter,
+.ticket .bar {
+  display: none !important;           /* 아예 숨기기 */
+  width: auto !important;             /* 필요 시 글자폭 기준 */
+  max-width: max-content !important;
+}
 </style>
