@@ -62,7 +62,6 @@
 
       <div class="btns">
         <button class="btn" type="button" :disabled="confirming" @click="router.push('/')">처음으로</button>
-        <!-- ✅ 추가: 예약내역으로 이동 -->
         <button class="btn ghost" type="button" :disabled="confirming" @click="router.push('/mypage/history')">
           예약내역으로
         </button>
@@ -74,7 +73,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-//import api from '@/api/auth' // axios 인스턴스 (baseURL이 /api 면 '/payments/..'로 호출하면 /api/payments/..로 나감)
 import { confirmPayment } from '@/api/payments'
 
 const route = useRoute()
@@ -158,6 +156,9 @@ async function confirmOnServer () {
     })
 
     resp.value = data
+
+    // ✅ 브라우저 alert로 알림
+    window.alert('예약이 확정되었어요. 메일을 확인해주세요.')
 
     // 민감 파라미터가 URL에 남지 않도록 정리 (bookingId만 유지)
     localStorage.removeItem('holdCode')

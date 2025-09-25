@@ -1,5 +1,6 @@
 package com.example.hotelres.tosspayment;
 
+import com.example.hotelres.auth.EmailService;
 import com.example.hotelres.common.ApiException;
 import com.example.hotelres.owner.BookingEntity;
 import com.example.hotelres.owner.BookingItemEntity;
@@ -8,17 +9,21 @@ import com.example.hotelres.owner.BookingRepository;
 import com.example.hotelres.owner.BookingStatus;
 import com.example.hotelres.payment.*;
 import com.example.hotelres.reservation.*;
+import com.example.hotelres.reservation.MyBookingQueryRepository; // ✅ 추가
 import com.example.hotelres.tosspayment.dto.TossConfirmResponse;
 import com.example.hotelres.tosspayment.dto.PaymentConfirmResponse;
+import com.example.hotelres.user.UserRepository;
+import com.example.hotelres.user.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -32,50 +37,51 @@ public class PaymentsOrchestrator {
     private final BookingItemRepository bookingItemRepository;
     private final CouponIssuanceRepository couponIssuanceRepository;
 
+    private final EmailService emailService;
+    private final UserRepository userRepository;
+    private final MyBookingQueryRepository myBookingQueryRepository; // ✅ 추가
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * @param paymentKey Toss에서 콜백으로 준 키
-     * @param orderId    우리가 만든 주문번호
-     * @param amount     (무시해도 됨) 프론트가 보내는 금액 — 홀드 금액으로 덮어쓴다
-     * @param holdCode   결제 대상 홀드 코드
-     */
     @Transactional
     public PaymentConfirmResponse confirmToss(String paymentKey, String orderId, long amount, String holdCode) {
-        // 멱등 처리
+        // 멱등
         var existing = paymentRepository.findByProviderRef(paymentKey);
         if (existing.isPresent()) {
             var p = existing.get();
-            return new PaymentConfirmResponse(p.getBookingId(), p.getId(), null);
+            String receiptUrl0 = null;
+            try {
+                var node = objectMapper.readTree(Optional.ofNullable(p.getRawPayload()).orElse("{}"));
+                if (node.has("receipt") && node.get("receipt").has("url")) {
+                    receiptUrl0 = node.get("receipt").get("url").asText(null);
+                }
+            } catch (Exception ignore) {}
+            return new PaymentConfirmResponse(p.getBookingId(), p.getId(), receiptUrl0);
         }
+
         log.info(">>> ConfirmToss req: paymentKey={}, orderId={}, reqAmount={}, holdCode={}", paymentKey, orderId, amount, holdCode);
-        // 1) 홀드 선조회 & 서버 기준 금액 확보
+
+        // 1) 홀드 조회
         BookingHold hold = bookingHoldRepository.findByHoldCode(holdCode);
-        
-        log.info(">>> Hold from DB: totalAmount={}, discount={}, roomSubtotal={}", hold.getTotalAmount(), hold.getDiscount(), hold.getRoomSubtotal());
         if (hold == null) throw new ApiException("유효하지 않은 holdCode");
+
         Integer expectedAmount = hold.getTotalAmount();
         if (expectedAmount == null) throw new ApiException("홀드 총액이 비어 있습니다.");
-
-        // (선택) 만료 체크
         if (hold.getExpiresAt() != null && hold.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
             throw new ApiException("홀드가 만료되었습니다.");
         }
 
-        // 2) Toss 승인 — 반드시 '홀드 금액'으로 승인
+        // 2) Toss 승인
         TossConfirmResponse res = tossPaymentService.confirm(paymentKey, orderId, expectedAmount);
-        log.info(">>> Toss response: totalAmount={}", res.totalAmount());
-
-        // 3) 금액 일치 검증 (PG 승인금액 vs 서버 홀드금액)
         if (!Objects.equals(expectedAmount, res.totalAmount())) {
             throw new ApiException("결제 금액 불일치(hold=" + expectedAmount + ", paid=" + res.totalAmount() + ")");
         }
 
-     // 4) 예약 확정
+        // 3) 예약 확정
         int nights = 1;
         if (hold.getCheckIn() != null && hold.getCheckOut() != null) {
             long d = ChronoUnit.DAYS.between(hold.getCheckIn(), hold.getCheckOut());
-            nights = (int) Math.max(1, d);   // 최소 1
+            nights = (int) Math.max(1, d);
         }
 
         BookingEntity booking = new BookingEntity();
@@ -83,7 +89,7 @@ public class PaymentsOrchestrator {
         booking.setHotelId(hold.getHotelId());
         booking.setCheckIn(hold.getCheckIn());
         booking.setCheckOut(hold.getCheckOut());
-        booking.setNights(nights);                 // ✅ 기존: between(...) 바로 대입 → nights 사용
+        booking.setNights(nights);
         booking.setGuests(hold.getGuests());
         booking.setTotalAmount(res.totalAmount());
         booking.setCurrency(hold.getCurrency());
@@ -91,16 +97,17 @@ public class PaymentsOrchestrator {
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.save(booking);
 
-        // 5) 라인아이템
+        // 4) 라인아이템
         BookingItemEntity item = BookingItemEntity.builder()
                 .booking(booking)
                 .roomTypeId(hold.getRoomTypeId())
                 .ratePlanId(hold.getRatePlanId())
-                .quantity(nights)                        // ✅ 반드시 채우기! (NULL 금지)
-                .priceTotal(hold.getTotalAmount())       // 필요하면 roomSubtotal()로 교체
+                .quantity(nights)
+                .priceTotal(hold.getTotalAmount())
                 .build();
         bookingItemRepository.save(item);
-        // 6) 결제 저장
+
+        // 5) 결제 저장
         Payment p = new Payment();
         p.setBookingId(booking.getId());
         p.setUserId(hold.getUserId());
@@ -120,23 +127,68 @@ public class PaymentsOrchestrator {
         }
         paymentRepository.save(p);
 
-        // 7) 쿠폰 사용 처리 (멱등)
+        // 6) 쿠폰 사용 처리
         if (hold.getCouponCode() != null && !hold.getCouponCode().isBlank()) {
             var now = java.time.LocalDateTime.now();
             var today = now.toLocalDate();
             couponIssuanceRepository
                     .findAvailableByUserAndCode(hold.getUserId(), hold.getCouponCode(), today, now)
                     .ifPresent(ci -> {
-                        ci.setStatus(CouponIssuanceStatus.USED); // ✅ enum 이름 주의
+                        ci.setStatus(CouponIssuanceStatus.USED);
                         ci.setUsedBookingId(booking.getId());
                         couponIssuanceRepository.save(ci);
                     });
         }
 
-        // 8) 홀드 삭제
+        // 7) 홀드 삭제
         bookingHoldRepository.delete(hold);
 
-        String receiptUrl = res.receipt() == null ? null : String.valueOf(res.receipt().get("url"));
+        // 8) 영수증 URL (프론트 응답용 — 메일에는 사용 안 함)
+        String receiptUrl = null;
+        if (res.receipt() != null) {
+            Object urlObj = res.receipt().get("url");
+            if (urlObj != null) receiptUrl = String.valueOf(urlObj);
+        }
+
+        // 9) ✅ 메일 발송 데이터: 쿼리 레포에서 호텔/객실명 한 번에 가져오기
+        try {
+            String toEmail = null;
+            String customerName = null;
+
+            if (hold.getUserId() != null) {
+                Optional<User> uopt = userRepository.findById(hold.getUserId());
+                if (uopt.isPresent()) {
+                    User u = uopt.get();
+                    toEmail = u.getEmail();
+                    customerName = u.getName();
+                }
+            }
+
+            if (toEmail != null && !toEmail.isBlank()) {
+                // 단건 요약 가져오기 (hotelName, roomTypeName 포함)
+                var rowOpt = myBookingQueryRepository.findMyBooking(hold.getUserId(), booking.getId());
+                String hotelName = rowOpt.map(MyBookingQueryRepository.MyBookingRow::getHotelName).orElse("");
+                String roomTypeName = rowOpt.map(MyBookingQueryRepository.MyBookingRow::getRoomTypeName).orElse("");
+
+                emailService.sendBookingConfirmation(new EmailService.BookingMailPayload(
+                        toEmail,
+                        customerName,
+                        booking.getId(),
+                        hotelName,
+                        roomTypeName,
+                        booking.getCheckIn(),
+                        booking.getCheckOut(),
+                        booking.getGuests(),
+                        String.format("%,d원", res.totalAmount())
+                ));
+            } else {
+                log.info("예약확인 메일 스킵: 사용자 이메일을 찾지 못함 (userId={})", hold.getUserId());
+            }
+        } catch (Exception mailEx) {
+            log.warn("예약확인 메일 전송 실패: {}", mailEx.toString());
+        }
+
+        // 10) 응답
         return new PaymentConfirmResponse(booking.getId(), p.getId(), receiptUrl);
     }
 
