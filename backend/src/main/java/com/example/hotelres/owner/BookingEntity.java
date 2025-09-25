@@ -67,6 +67,15 @@ public class BookingEntity {
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "canceled_at")
+    private LocalDateTime canceledAt;
+
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
+    @Column(name = "canceled_by", length = 32) // USER / OWNER / ADMIN
+    private String canceledBy;
+
     // --- 연관 관계 (예약 인원 정보) ---
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BookingGuest> guestsInfo = new ArrayList<>();

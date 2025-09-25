@@ -72,3 +72,28 @@ export async function del(url) {
   })
   return handle(r, 'DELETE', url)
 }
+
+export async function upload(url, formData) {
+  const fd = formData instanceof FormData ? formData : new FormData();
+  if (!(formData instanceof FormData) && formData) {
+    // { key: value } 형태도 허용
+    Object.entries(formData).forEach(([k, v]) => fd.append(k, v));
+  }
+
+  const r = await fetch(build(url), {
+    method: 'POST',
+    headers: { ...authHeaders() }, // 'Content-Type' 넣지 않기!
+    credentials: 'include',
+    body: fd,
+  });
+  return handle(r, 'POST', url);
+}
+export async function postMultipart(url, formData) {
+  const r = await fetch(build(url), {
+    method: 'POST',
+    headers: { ...authHeaders() }, 
+    credentials: 'include',
+    body: formData,
+  })
+  return handle(r, 'POST', url)
+}
