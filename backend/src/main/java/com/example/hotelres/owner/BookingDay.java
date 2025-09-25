@@ -8,16 +8,16 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(
-    name = "booking_day",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_booking_day",
-        columnNames = {"hotel_id", "room_type_id", "stay_date"}
-    ),
-    indexes = {
-        @Index(name = "ix_bd_hotel_date", columnList = "hotel_id, stay_date"),
-        @Index(name = "ix_bd_roomtype_date", columnList = "room_type_id, stay_date"),
-        @Index(name = "ix_bd_sellable", columnList = "hotel_id, room_type_id, stay_date")
-    }
+        name = "booking_day",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_booking_day",
+                columnNames = {"hotel_id", "room_type_id", "stay_date"}
+        ),
+        indexes = {
+                @Index(name = "ix_bd_hotel_date",    columnList = "hotel_id, stay_date"),
+                @Index(name = "ix_bd_roomtype_date", columnList = "room_type_id, stay_date")
+                // ⚠ is_sellable, remaining_qty 는 가상 컬럼이라 JPA @Index에 못 넣습니다. DB DDL에서만 유지하세요.
+        }
 )
 @Getter
 @Setter
@@ -50,9 +50,9 @@ public class BookingDay {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
-    private BookingDayStatus status = BookingDayStatus.OPEN;
+    private BookingDayStatus status = BookingDayStatus.OPEN; // OPEN/CLOSED/SOLD_OUT
 
-    // ====== DB 파생 컬럼 (읽기 전용) ======
+    // ---- DB 생성(가상) 컬럼: 읽기 전용 ----
     @Column(name = "remaining_qty", insertable = false, updatable = false)
     private Integer remainingQty;
 
@@ -65,6 +65,10 @@ public class BookingDay {
     @Column(name = "updated_at", insertable = false, updatable = false)
     private LocalDateTime updatedAt;
 
+    // (선택) 낙관적 락 – 현재는 PESSIMISTIC_WRITE를 쓰지만, 추가해도 무방
+    // @Version
+    // private Long version;
+
     // --- 편의 생성자 ---
     public BookingDay(Long hotelId, Long roomTypeId, LocalDate stayDate) {
         this.hotelId = hotelId;
@@ -74,5 +78,40 @@ public class BookingDay {
         this.booked = 0;
         this.price = 0;
         this.status = BookingDayStatus.OPEN;
+    }
+
+    // ===== 도메인 편의 메서드 =====
+
+    /** 예약 발생: booked += qty (allotment 초과 방지) */
+    public void book(int qty) {
+        if (qty <= 0) return;
+        int next = this.booked + qty;
+        if (next > this.allotment) {
+            // 정책에 따라 예외를 던지거나 최대치로 clamp
+            next = this.allotment;
+        }
+        this.booked = next;
+        soldOutIfNeeded();
+    }
+
+    /** 예약 취소: booked -= qty (0 미만 방지) */
+    public void release(int qty) {
+        if (qty <= 0) return;
+        int next = this.booked - qty;
+        if (next < 0) next = 0;
+        this.booked = next;
+        // 매진 해제
+        if (this.status == BookingDayStatus.SOLD_OUT && this.booked < this.allotment) {
+            this.status = BookingDayStatus.OPEN;
+        }
+    }
+
+    /** 현재 수치에 맞춰 SOLD_OUT/OPEN 보정 */
+    public void soldOutIfNeeded() {
+        if (this.booked >= this.allotment && this.allotment > 0) {
+            this.status = BookingDayStatus.SOLD_OUT;
+        } else if (this.status == BookingDayStatus.SOLD_OUT && this.booked < this.allotment) {
+            this.status = BookingDayStatus.OPEN;
+        }
     }
 }

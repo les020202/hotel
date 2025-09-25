@@ -18,6 +18,7 @@ export default defineConfig({
       '/api': { target: 'http://localhost:8888', changeOrigin: true },
       '/oauth2': { target: 'http://localhost:8888', changeOrigin: true },
       '/files': { target: 'http://localhost:8888', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:8888', changeOrigin: true }, 
       '/confirm': { target: 'http://localhost:8888', changeOrigin: true },
       '/logout': { target: 'http://localhost:8888', changeOrigin: true },
     },
