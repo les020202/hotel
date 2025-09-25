@@ -22,7 +22,6 @@ public class SupportTicketController {
   private final TicketRepo tickets;
   private final MsgRepo msgs;
 
-  // ─────────────────────────────────────────────────────────────────────
   // 1) 내 티켓 목록 + 상태/검색어 필터
   @GetMapping("/tickets")
   public TicketsRes myTickets(Authentication auth,
@@ -64,36 +63,52 @@ public class SupportTicketController {
     return SupportDtos.TicketBrief.of(t);
   }
 
-  // 3) 티켓 단건 조회 (본인만, 관리자면 허용)
+  // 3) 티켓 단건 조회 (본인 or 관리자)
   @GetMapping("/tickets/{id}")
   public TicketBrief ticket(Authentication auth, @PathVariable Long id) {
     User me = currentUser.get(auth);
     SupportTicket t = tickets.findById(id)
         .orElseThrow(() -> new NotFoundException("ticket not found"));
-    //if (!isOwnerOrAdmin(me, t)) throw new NotFoundException("ticket not found");
+    if (!isOwnerOrAdmin(me, t, auth)) throw new NotFoundException("ticket not found");
     return SupportDtos.TicketBrief.of(t);
   }
 
-  // 4) 티켓 메시지 목록 (본인만)
-  @GetMapping("/tickets/{id}/messages")
-  public List<MessageRes> messages(Authentication auth, @PathVariable Long id) {
-    User me = currentUser.get(auth);
-    SupportTicket t = tickets.findById(id)
-        .orElseThrow(() -> new NotFoundException("ticket not found"));
-    //if (!isOwnerOrAdmin(me, t)) throw new NotFoundException("ticket not found");
+  // 4) 티켓 메시지 목록 (본인 or 관리자)
+ @GetMapping("/tickets/{id}/messages")
+public List<MessageRes> messages(Authentication auth, @PathVariable Long id) {
+  User me = currentUser.get(auth);
+  SupportTicket t = tickets.findById(id)
+      .orElseThrow(() -> new NotFoundException("ticket not found"));
+  // 권한체크를 살릴 거면 아래 주석 해제
+  // if (!isOwnerOrAdmin(me, t, auth)) throw new NotFoundException("ticket not found");
 
-    return msgs.findByTicketIdOrderByCreatedAtAsc(id).stream()
-        .map(m -> new MessageRes(m.getId(), m.getSender().getId(), m.getContent(), m.getCreatedAt()))
-        .toList();
-  }
+  return msgs.findByTicketIdOrderByCreatedAtAsc(id).stream()
+      .map(m -> {
+        User sender = m.getSender();
+        String senderRole = (sender != null && sender.getRole() != null)
+            ? sender.getRole().name()   // 예: ROLE_ADMIN, ROLE_USER
+            : null;
 
-  // 5) 티켓에 메시지 추가 (본인만)
+        return new MessageRes(
+            m.getId(),
+            sender != null ? sender.getId() : null,
+            senderRole,                // ✅ 추가 필드
+            m.getContent(),
+            m.getCreatedAt()
+        );
+      })
+      .toList();
+}
+
+
+
+  // 5) 티켓에 메시지 추가 (본인 or 관리자)
   @PostMapping("/tickets/{id}/messages")
   public void addMessage(Authentication auth, @PathVariable Long id, @RequestBody MessageReq req) {
     User me = currentUser.get(auth);
     SupportTicket t = tickets.findById(id)
         .orElseThrow(() -> new NotFoundException("ticket not found"));
-    //if (!isOwnerOrAdmin(me, t)) throw new NotFoundException("ticket not found");
+    if (!isOwnerOrAdmin(me, t, auth)) throw new NotFoundException("ticket not found");
 
     SupportMessage m = new SupportMessage();
     m.setTicket(t);
@@ -102,13 +117,18 @@ public class SupportTicketController {
     m.setCreatedAt(LocalDateTime.now());
     msgs.save(m);
   }
-  /* 
-  private boolean isOwnerOrAdmin(User me, SupportTicket t) {
-    // 관리자 판별 로직은 프로젝트 권한체계에 맞춰 수정
-    
-    boolean admin = me.getRoles() != null && me.getRoles().stream().anyMatch(r -> "ROLE_ADMIN".equals(r.getName()));
-    return admin || t.getUser().getId().equals(me.getId());
-   
+
+  /** 단일 Enum role 기반 + Security 권한 기반(둘 중 하나라도 ADMIN이면 true) */
+  private boolean isOwnerOrAdmin(User me, SupportTicket t, Authentication auth) {
+    boolean isOwner = t.getUser() != null && t.getUser().getId() != null && t.getUser().getId().equals(me.getId());
+
+    // User 엔티티의 단일 Enum 필드로 체크
+    boolean isAdminByUser = me.getRole() == User.Role.ROLE_ADMIN;
+
+    // Spring Security 권한으로도 보조 체크 (ex. DB와 상이할 수 있는 경우)
+    boolean isAdminByAuth = auth != null && auth.getAuthorities() != null &&
+        auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
+    return isOwner || isAdminByUser || isAdminByAuth /* || isOwnerRole */;
   }
-  */
 }

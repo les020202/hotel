@@ -1,8 +1,5 @@
 
 <!-- src/views/mypage/Account.vue -->
-=======
-<!-- src/views/mypage/Account.vue -->
->>>>>>> origin/won1
 <template>
   <div class="account">
     <h2>Account</h2>

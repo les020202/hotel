@@ -1,61 +1,58 @@
 // src/api/wishlistApi.js
 import api, { isLoggedIn } from '@/api/auth'
-import { reactive } from 'vue'
+import { ref, shallowRef } from 'vue'
 
-/** 페이지네이션 조회 */
 export const fetchWishlist = ({ limit = 100, offset = 0 } = {}) =>
   api.get('/wishlists', { params: { limit, offset } }).then(r => r.data)
 
-/** 생성 (호텔 찜) */
 export const addWishlist = (hotelId) =>
   api.post('/wishlists', { hotelId }).then(r => r.data)
 
-/** 삭제 (PK 기준) — 폴백용 */
 export const deleteWishlist = (wishlistId) =>
   api.delete(`/wishlists/${wishlistId}`).then(() => true)
 
-/** 삭제 (호텔 기준) — 기본 경로 */
 export const deleteWishlistByHotel = (hotelId) =>
   api.delete(`/wishlists/by-hotel/${hotelId}`).then(() => true)
 
-/** 단일 호텔 찜 여부 확인(경량) */
 export const hasWishlist = (hotelId) =>
   api.get('/wishlists/has', { params: { hotelId } }).then(r => r.data)
 
-/* ---------------------------------------------
-   전역 상태 (싱글톤)
---------------------------------------------- */
-const store = reactive({
-  loaded: false,
-  busy: false,
-  ids: new Set(),         // Set<hotelId>
-  map: new Map(),         // hotelId -> wishlistId
-})
+// ── 전역 상태(싱글톤) + 시그널 ───────────────────────────────
+const _loaded = ref(false)
+const _busy   = ref(false)
+export const wishlistSignal = ref(0)
 
-function ingest(items = []) {
-  const nextIds = new Set(store.ids)
-  const nextMap = new Map(store.map)
-  for (const it of items) {
-    const hotelId = it?.hotel?.id ?? it?.hotelId ?? it?.id
-    const wishlistId = it?.wishlistId ?? it?.id
-    if (!hotelId) continue
-    nextIds.add(Number(hotelId))
-    if (wishlistId != null) nextMap.set(Number(hotelId), Number(wishlistId))
-  }
-  store.ids = nextIds
-  store.map = nextMap
+const _idsRef = shallowRef(new Set())     // Set<hotelId:number>
+const _mapRef = shallowRef(new Map())     // Map<hotelId, wishlistId>
+
+function bump() { wishlistSignal.value++ }
+function setIds(next){ _idsRef.value = next; bump() }
+function setMap(next){ _mapRef.value = next; bump() }
+
+export function isWished(hotelId) {
+  const hid = Number(hotelId) || 0
+  return _idsRef.value.has(hid)
 }
 
-export function wishlistState() { return store }
+function ingest(items = []) {
+  const nextIds = new Set(_idsRef.value)
+  const nextMap = new Map(_mapRef.value)
+  for (const it of items) {
+    const hid = Number(it?.hotel?.id ?? it?.hotelId ?? it?.id) || 0
+    const wid = it?.wishlistId ?? it?.id
+    if (!hid) continue
+    nextIds.add(hid)
+    if (wid != null) nextMap.set(hid, Number(wid))
+  }
+  setIds(nextIds); setMap(nextMap)
+}
 
-/** 전체 동기화(로그인시에만) */
 export async function ensureWishlistLoaded() {
-  if (store.loaded || store.busy) return
-  if (!isLoggedIn()) { store.loaded = true; return }
-  store.busy = true
+  if (_loaded.value || _busy.value) return
+  if (!isLoggedIn()) { _loaded.value = true; return }
+  _busy.value = true
   try {
-    let offset = 0
-    const limit = 200
+    let offset = 0, limit = 200
     while (true) {
       const page = await fetchWishlist({ limit, offset })
       const items = page?.items ?? []
@@ -65,94 +62,129 @@ export async function ensureWishlistLoaded() {
       if (items.length === 0) break
     }
   } finally {
-    store.busy = false
-    store.loaded = true
+    _busy.value = false
+    _loaded.value = true
   }
 }
 
-/** 단일 호텔만 빠르게 동기화 */
 export async function syncCurrentHotel(hotelId) {
-  hotelId = Number(hotelId)
-  if (!hotelId || !isLoggedIn()) return
+  const hid = Number(hotelId) || 0
+  if (!hid || !isLoggedIn()) return
   try {
-    const r = await hasWishlist(hotelId)
+    const r = await hasWishlist(hid)
+    const nextIds = new Set(_idsRef.value)
+    const nextMap = new Map(_mapRef.value)
     if (r?.wished) {
-      store.ids.add(hotelId)
-      if (r?.wishlistId != null) store.map.set(hotelId, Number(r.wishlistId))
+      nextIds.add(hid)
+      if (r?.wishlistId != null) nextMap.set(hid, Number(r.wishlistId))
     } else {
-      store.ids.delete(hotelId)
-      store.map.delete(hotelId)
+      nextIds.delete(hid)
+      nextMap.delete(hid)
     }
-  } catch { /* 네트워크 오류는 무시 */ }
+    setIds(nextIds); setMap(nextMap)
+  } catch { /* ignore */ }
 }
 
-/** 목록 화면: 여러 호텔을 한 번에 맞춰두고 싶을 때 */
+/**
+ * ✅ 핵심 수정: 화면에 보이는 여러 호텔의 위시 상태를 서버로부터 “재검증”
+ *  - 서버에 배치 API가 있으면 그걸 사용하고,
+ *  - 없으면 hasWishlist를 id별로 병렬 호출
+ */
 export async function syncHotels(hotelIds = []) {
   if (!isLoggedIn()) return
-  await ensureWishlistLoaded() // 대부분 이걸로 커버됨
-  // 별도 호출 없이 store.ids 기준으로 즉시 반영됨
+  const ids = [...new Set(hotelIds.map(n => Number(n) || 0).filter(Boolean))]
+  if (ids.length === 0) return
+
+  // 배치 엔드포인트가 있다면 주석 해제해서 사용하세요.
+  // try {
+  //   const { data } = await api.post('/wishlists/has-many', { hotelIds: ids })
+  //   // data: [{ hotelId, wished, wishlistId }]
+  //   const nextIds = new Set(_idsRef.value)
+  //   const nextMap = new Map(_mapRef.value)
+  //   for (const it of (data || [])) {
+  //     const hid = Number(it.hotelId) || 0
+  //     if (!hid) continue
+  //     if (it.wished) {
+  //       nextIds.add(hid)
+  //       if (it.wishlistId != null) nextMap.set(hid, Number(it.wishlistId))
+  //     } else {
+  //       nextIds.delete(hid)
+  //       nextMap.delete(hid)
+  //     }
+  //   }
+  //   setIds(nextIds); setMap(nextMap)
+  //   return
+  // } catch { /* fallback below */ }
+
+  // 폴백: 개별 조회 병렬
+  const results = await Promise.allSettled(ids.map(id => hasWishlist(id)))
+  const nextIds = new Set(_idsRef.value)
+  const nextMap = new Map(_mapRef.value)
+  for (let i = 0; i < ids.length; i++) {
+    const hid = ids[i]
+    const r = results[i]
+    if (r.status !== 'fulfilled') continue
+    const v = r.value
+    if (v?.wished) {
+      nextIds.add(hid)
+      if (v?.wishlistId != null) nextMap.set(hid, Number(v.wishlistId))
+    } else {
+      nextIds.delete(hid)
+      nextMap.delete(hid)
+    }
+  }
+  setIds(nextIds); setMap(nextMap)
 }
 
-/** 현재 호텔이 찜 상태인지 */
-export function isWished(hotelId) {
-  if (!hotelId) return false
-  return store.ids.has(Number(hotelId))
-}
-
-/** 하트 토글(알림 없음) — 호텔ID 기준 삭제 우선 */
 export async function toggleWishlist(hotelId) {
-  hotelId = Number(hotelId)
-  if (!hotelId) return
-
+  const hid = Number(hotelId) || 0
+  if (!hid) return
   if (!isLoggedIn()) {
     const err = new Error('AUTH_REQUIRED')
     err.code = 'AUTH_REQUIRED'
     throw err
   }
-
   await ensureWishlistLoaded()
-  if (store.busy) return
-  store.busy = true
+  if (_busy.value) return
+  _busy.value = true
 
-  const already = store.ids.has(hotelId)
-  // 낙관적 UI
-  if (already) store.ids.delete(hotelId)
-  else store.ids.add(hotelId)
+  const already = _idsRef.value.has(hid)
+  // 낙관적
+  const optimistic = new Set(_idsRef.value)
+  already ? optimistic.delete(hid) : optimistic.add(hid)
+  setIds(optimistic)
 
   try {
     if (already) {
-      // 호텔 기준 삭제 우선
       try {
-        await deleteWishlistByHotel(hotelId)
-        store.map.delete(hotelId)
+        await deleteWishlistByHotel(hid)
+        const nm = new Map(_mapRef.value); nm.delete(hid); setMap(nm)
       } catch (e) {
-        // PK 폴백
-        const wid = store.map.get(hotelId)
+        const wid = _mapRef.value.get(hid)
         if (!wid) {
-          await syncCurrentHotel(hotelId)
-          const wid2 = store.map.get(hotelId)
+          await syncCurrentHotel(hid)
+          const wid2 = _mapRef.value.get(hid)
           if (!wid2) throw e
           await deleteWishlist(wid2)
         } else {
           await deleteWishlist(wid)
         }
-        store.map.delete(hotelId)
+        const nm = new Map(_mapRef.value); nm.delete(hid); setMap(nm)
       }
     } else {
-      const created = await addWishlist(hotelId)
-      const wid =
-        created?.wishlistId ??
-        created?.id ??
-        created?.data?.wishlistId ??
-        created?.data?.id
-      if (wid != null) store.map.set(hotelId, Number(wid))
+      const created = await addWishlist(hid)
+      const wid = created?.wishlistId ?? created?.id ?? created?.data?.wishlistId ?? created?.data?.id
+      if (wid != null) {
+        const nm = new Map(_mapRef.value); nm.set(hid, Number(wid)); setMap(nm)
+      }
     }
   } catch (e) {
     // 롤백
-    if (already) store.ids.add(hotelId)
-    else store.ids.delete(hotelId)
+    const rb = new Set(_idsRef.value)
+    already ? rb.add(hid) : rb.delete(hid)
+    setIds(rb)
     throw e
   } finally {
-    store.busy = false
+    _busy.value = false
   }
 }
