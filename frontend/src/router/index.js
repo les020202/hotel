@@ -178,7 +178,15 @@ const router = createRouter({
     { path: 'hotels/:hotelId/inventory', component: OwnerInventory },
     { path: 'hotels/:hotelId/bookings', component: OwnerBookings },
     { path: 'hotels/:hotelId/assign', component: AssignView },
-    { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') }
+
+    { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') },
+  { 
+  path: 'hotels/:hotelId/reviews',
+  name: 'OwnerReviews',
+  component: () => import('@/views/owner/OwnerReviews.vue'),
+  props: route => ({ hotelId: Number(route.params.hotelId) })
+},
+
   ]
 },
 

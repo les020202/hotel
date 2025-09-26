@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
+import java.time.*; // ★ 추가: LocalDate, LocalTime, ZoneId 등
 import java.util.List;
 
 @Service
@@ -19,23 +19,17 @@ public class BookingService {
     private final BookingItemRepository bookingItemRepository;
     private final BookingDayRepository bookingDayRepository;
 
-    /**
-     * 예약 취소(소프트): USER/OWNER/ADMIN 모두 가능
-     * - 재고 복구: booking_day.booked -= rooms
-     * - 상태 플래그: CANCELLED, canceledAt/By/Reason 세팅
-     * - 멱등: 이미 취소면 그냥 종료
-     */
     @Transactional
     public void cancelBooking(Long bookingId,
                               Long actorUserId,
                               Role actorRole,
                               String reason) {
 
-        // 1) 예약 가져오기
+        // 1) 예약
         BookingEntity b = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "예약이 존재하지 않습니다."));
 
-        // 2) 권한 체크
+        // 2) 권한
         switch (actorRole) {
             case ROLE_USER -> {
                 if (!b.getUserId().equals(actorUserId)) {
@@ -43,20 +37,40 @@ public class BookingService {
                 }
             }
             case ROLE_OWNER -> {
-                // 자신 호텔의 예약인지 검증
                 boolean ok = bookingRepository.existsByIdAndHotelId(b.getId(), b.getHotelId());
-                if (!ok) {
-                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 호텔 예약만 취소할 수 있습니다.");
-                }
+                if (!ok) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 호텔 예약만 취소할 수 있습니다.");
             }
             case ROLE_ADMIN -> { /* 모두 허용 */ }
             default -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, "권한이 없습니다.");
         }
 
-        // 3) 멱등: 이미 취소면 끝
+        // 3) 이미 취소면 멱등
         if (b.getStatus() == BookingStatus.CANCELLED) return;
 
-        // 4) 재고 복구 (아이템 수량 사용)
+        // 4) ★ 취소 마감(컷오프) 검증
+        //    - 시스템 시간대: Asia/Seoul (원하면 시스템 기본으로 바꿔도 됨)
+        ZoneId zone = ZoneId.of("Asia/Seoul");
+        LocalDateTime now = LocalDateTime.now(zone);
+
+        LocalDate checkIn = b.getCheckIn();
+        // USER: 전날 23:59:59.999999999
+        LocalDateTime userDeadline   = LocalDateTime.of(checkIn.minusDays(1), LocalTime.MAX);
+        // OWNER/ADMIN: 당일 23:59:59.999999999
+        LocalDateTime staffDeadline  = LocalDateTime.of(checkIn,           LocalTime.MAX);
+
+        LocalDateTime deadline = switch (actorRole) {
+            case ROLE_USER  -> userDeadline;
+            case ROLE_OWNER, ROLE_ADMIN -> staffDeadline;
+        };
+
+        if (now.isAfter(deadline)) {
+            String msg = (actorRole == Role.ROLE_USER)
+                    ? "체크인 전날까지 취소할 수 있습니다."
+                    : "체크인 당일까지 취소할 수 있습니다.";
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
+        }
+
+        // 5) 재고 복구
         List<BookingItemEntity> items = bookingItemRepository.findByBooking_Id(b.getId());
         if (items != null) {
             for (var it : items) {
@@ -71,9 +85,9 @@ public class BookingService {
             }
         }
 
-        // 5) 상태/메타 업데이트(소프트 취소)
-        b.setStatus(BookingStatus.CANCELLED); // 상태명 CANCELLED 확인 완료
-        b.setCanceledAt(LocalDateTime.now());
+        // 6) 상태/메타 업데이트
+        b.setStatus(BookingStatus.CANCELLED);
+        b.setCanceledAt(LocalDateTime.now(zone));
         b.setCancelReason(reason);
         b.setCanceledBy(
                 actorRole == Role.ROLE_ADMIN ? "ADMIN" :
@@ -81,6 +95,5 @@ public class BookingService {
         );
 
         bookingRepository.save(b);
-        // (옵션) 결제 환불/취소 연동 지점
     }
 }

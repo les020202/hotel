@@ -30,6 +30,9 @@ public class ReviewDtos {
         private String roomTypeName;         // 실제 투숙 룸타입명
         private LocalDate checkIn;
         private LocalDate checkOut;
+
+        private String hotelName;   // ← 반드시 추가
+        private String userName;    // ← 반드시 추가
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -59,5 +62,7 @@ public class ReviewDtos {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class ReportRequest {
         private String reason;
+        private String detail;        // ★ 추가: 상세 사유
+        private String reporterType;
     }
 }

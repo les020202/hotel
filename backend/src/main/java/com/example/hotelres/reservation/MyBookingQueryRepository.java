@@ -8,26 +8,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
-import java.sql.Date;       // ← java.sql.Date (컨트롤러에서 LocalDate로 변환)
-import java.util.Optional;
+import java.sql.Date; // checkIn / checkOut 매핑용
 
 /**
- * "내 예약 요약" 네이티브 조회용 레포지토리.
- *
- * - 영수증 URL: payments.raw_payload(JSON)에 들어있는 $.receipt.url 에서 추출
- * - 날짜: DATE(b.check_in/out) 로 잘라 java.sql.Date 로 받음
- * - 상태값: b.status 는 문자열/enum String 저장 가정 (숫자면 쿼리/프로젝션을 맞춰주세요)
- *
- * 필요 테이블:
- *   bookings(id, user_id, hotel_id, check_in, check_out, nights, guests, total_amount, currency, status)
- *   booking_items(id, booking_id, room_type_id, ...)
- *   hotels(id, name, ...)
- *   room_types(id, name, ...)
- *   payments(id, booking_id, status, raw_payload, ...)
+ * "내 예약" 네이티브 조회용 레포지토리.
+ * - 취소 메타(canceled_at/by/reason) 포함
+ * - 날짜: DATE()로 잘라 java.sql.Date로 매핑
+ * - 상태: CAST(b.status AS CHAR)
  */
 public interface MyBookingQueryRepository extends Repository<BookingEntity, Long> {
 
-    // 목록
+    /* 목록 */
     @Query(value = """
         SELECT
           b.id                               AS bookingId,
@@ -40,7 +31,11 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
           b.guests                           AS guests,
           b.total_amount                     AS totalAmount,
           b.currency                         AS currency,
-          JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl
+          JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl,
+          /* 취소 메타 */
+          DATE_FORMAT(b.canceled_at, '%Y-%m-%dT%H:%i:%s') AS canceledAt,
+          b.canceled_by                      AS canceledBy,
+          b.cancel_reason                    AS cancelReason
         FROM bookings b
         JOIN booking_items bi ON bi.booking_id = b.id
         JOIN hotels       h   ON h.id = b.hotel_id
@@ -49,7 +44,7 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
             SELECT p2.id
             FROM payments p2
             WHERE p2.booking_id = b.id
-              AND p2.status = 'SUCCEEDED'  -- 숫자(enum ordinal)면 해당 값으로 교체
+              AND p2.status = 'SUCCEEDED'
             ORDER BY p2.id DESC
             LIMIT 1
         )
@@ -57,14 +52,12 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
         ORDER BY b.id DESC
         """,
             countQuery = """
-        SELECT COUNT(*)
-        FROM bookings b
-        WHERE b.user_id = :userId
+        SELECT COUNT(*) FROM bookings b WHERE b.user_id = :userId
         """,
             nativeQuery = true)
     Page<MyBookingRow> findMyBookings(@Param("userId") Long userId, Pageable pageable);
 
-    // 단건
+    /* 단건 */
     @Query(value = """
         SELECT
           b.id                               AS bookingId,
@@ -77,7 +70,11 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
           b.guests                           AS guests,
           b.total_amount                     AS totalAmount,
           b.currency                         AS currency,
-          JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl
+          JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl,
+          /* 취소 메타 */
+          DATE_FORMAT(b.canceled_at, '%Y-%m-%dT%H:%i:%s') AS canceledAt,
+          b.canceled_by                      AS canceledBy,
+          b.cancel_reason                    AS cancelReason
         FROM bookings b
         JOIN booking_items bi ON bi.booking_id = b.id
         JOIN hotels       h   ON h.id = b.hotel_id
@@ -86,7 +83,7 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
             SELECT p2.id
             FROM payments p2
             WHERE p2.booking_id = b.id
-              AND p2.status = 'SUCCEEDED'  -- 숫자(enum ordinal)면 해당 값으로 교체
+              AND p2.status = 'SUCCEEDED'
             ORDER BY p2.id DESC
             LIMIT 1
         )
@@ -94,24 +91,28 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
           AND b.id      = :bookingId
         """,
             nativeQuery = true)
-    Optional<MyBookingRow> findMyBooking(@Param("userId") Long userId,
-                                         @Param("bookingId") Long bookingId);
+    java.util.Optional<MyBookingRow> findMyBooking(@Param("userId") Long userId,
+                                                   @Param("bookingId") Long bookingId);
 
     /**
-     * 네이티브 결과 매핑용 프로젝션.
-     * 메서드명은 SELECT 별칭과 1:1로 매칭되어야 합니다.
+     * 네이티브 결과 매핑용 프로젝션 (SELECT 별칭과 1:1)
      */
     interface MyBookingRow {
-        Long   getBookingId();
-        String getStatus();
-        String getHotelName();
-        String getRoomTypeName();
-        Date   getCheckIn();     // java.sql.Date
-        Date   getCheckOut();    // java.sql.Date
+        Long    getBookingId();
+        String  getStatus();
+        String  getHotelName();
+        String  getRoomTypeName();
+        Date    getCheckIn();
+        Date    getCheckOut();
         Integer getNights();
         Integer getGuests();
         Integer getTotalAmount();
-        String getCurrency();
-        String getReceiptUrl();  // JSON에서 추출
+        String  getCurrency();
+        String  getReceiptUrl();
+
+        // ✅ 추가된 취소 메타
+        String  getCanceledAt();
+        String  getCanceledBy();
+        String  getCancelReason();
     }
 }

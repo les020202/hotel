@@ -97,3 +97,6 @@ export async function postMultipart(url, formData) {
   })
   return handle(r, 'POST', url)
 }
+
+export const http = { get, post, put, del, upload, postMultipart };
+export default http;

@@ -17,27 +17,24 @@ import com.example.hotelres.reservation.BookingGuest;
  */
 @Entity
 @Table(name = "bookings")
-@Getter
-@Setter
+@Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class BookingEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // FK (users.id)
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    // FK (hotels.id)
     @Column(name = "hotel_id", nullable = false)
     private Long hotelId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private BookingStatus status = BookingStatus.PENDING;
 
     @Column(name = "check_in", nullable = false)
@@ -56,6 +53,7 @@ public class BookingEntity {
     private int totalAmount;
 
     @Column(nullable = false, length = 3)
+    @Builder.Default
     private String currency = "KRW";
 
     @Column(name = "voucher_no", length = 40)
@@ -73,10 +71,11 @@ public class BookingEntity {
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
 
-    @Column(name = "canceled_by", length = 32) // USER / OWNER / ADMIN
-    private String canceledBy;
+    @Column(name = "canceled_by", length = 32)
+    private String canceledBy; // USER / OWNER / ADMIN
 
-    // --- 연관 관계 (예약 인원 정보) ---
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<BookingGuest> guestsInfo = new ArrayList<>();
 }
+

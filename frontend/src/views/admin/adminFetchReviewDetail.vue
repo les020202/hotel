@@ -51,7 +51,11 @@
             <option :value="false">숨김</option>
           </select>
         </label>
-        <!-- (체크박스 제거됨) -->
+
+        <label v-if="tab==='reports'" class="chip">
+          <input type="checkbox" v-model="ownerOnly" />
+          <span>OWNER 신고만</span>
+        </label>
       </div>
     </section>
 
@@ -110,14 +114,13 @@
           v-for="x in filteredReports"
           :key="`${x.reportId}-${x.id}`"
           class="table-row reports-grid clickable"
-          :class="{ ownerRow: isOwnerRole(x.reporterRole) }"
           @click="openDetailFromReport(x)"
         >
           <span class="muted">#{{ x.reportId }}</span>
           <span class="ellipsis" :title="x.hotelName">{{ x.hotelName || '-' }}</span>
           <span class="ellipsis" :title="x.userName">{{ x.userName || '-' }}</span>
           <span>
-            <span :class="['badge', isOwnerRole(x.reporterRole) ? 'owner' : '']" :title="x.reporterRole">
+            <span :class="['badge', x.reporterRole==='ROLE_OWNER' ? 'owner' : '']" :title="x.reporterRole">
               {{ x.reporterName }}
             </span>
           </span>
@@ -193,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { adminFetchReviews, adminFetchReports, adminDeleteReview, adminFetchReviewDetail } from '@/api/adminReviews'
 
 const tab = ref('reviews')
@@ -202,6 +205,7 @@ const q = ref('')
 const minRating = ref(null)
 const maxRating = ref(null)
 const visible = ref(null)
+const ownerOnly = ref(false)
 
 const rowsReviews = ref([])
 const rowsReports = ref([])
@@ -210,19 +214,10 @@ const toast = ref('')
 // 상세 상태
 const detail = ref({
   open: false,
-  data: null,
+  data: null,          // { id, hotelName, userName, rating, comment, visible, createdAt/createdDate }
   photos: [],
   loadingPhotos: false
 })
-
-// OWNER 역할 체크
-function isOwnerRole(role) {
-  if (Array.isArray(role)) {
-    return role.some(r => String(r).toUpperCase().includes('OWNER'))
-  }
-  const r = String(role || '').toUpperCase()
-  return r.includes('OWNER')   // 'OWNER' 또는 'ROLE_OWNER' 모두 통과
-}
 
 // ── Normalizers
 function normReview(r = {}) {
@@ -247,33 +242,15 @@ function normReview(r = {}) {
 }
 
 function normReport(x = {}) {
-  // 다양한 위치에서 역할 정보 모으기
-  const bucket = []
-  if (x.reporterRole) bucket.push(x.reporterRole)
-  if (x.reporter_role) bucket.push(x.reporter_role)
-  if (Array.isArray(x.reporterRoles)) bucket.push(...x.reporterRoles)
-  if (Array.isArray(x.reporter_roles)) bucket.push(...x.reporter_roles)
-  if (Array.isArray(x.reporterAuthorities)) bucket.push(...x.reporterAuthorities)
-  if (Array.isArray(x.reporter_authorities)) bucket.push(...x.reporter_authorities)
-  if (Array.isArray(x.roles)) bucket.push(...x.roles)
-  if (Array.isArray(x.authorities)) bucket.push(...x.authorities)
-  if (typeof x.scope === 'string') bucket.push(...x.scope.split(/[ ,]/))
-  if (Array.isArray(x.scopes)) bucket.push(...x.scopes)
-  if (x.owner === true) bucket.push('ROLE_OWNER')
-
-  const upper = bucket.filter(Boolean).map(v => String(v).toUpperCase())
-  const roleUp = upper.some(v => v.includes('OWNER')) ? 'ROLE_OWNER'
-             : upper[0] || 'ROLE_USER'
-
   return {
-    reportId:     x.reportId ?? x.report_id ?? x.id ?? null,
-    id:           x.id ?? x.reviewId ?? x.review_id ?? x.review?.id ?? null,
+    reportId:     x.reportId ?? x.id ?? x.report_id ?? null,
+    id:           x.reviewId ?? x.review_id ?? x.review?.id ?? null,
     hotelName:    x.hotelName ?? x.hotel_name ?? x.hotel ?? '-',
     userName:     x.userName ?? x.user_name ?? x.reviewUserName ?? '-',
     rating:       Number(x.rating ?? 0),
     comment:      x.comment ?? x.reviewComment ?? null,
     reporterName: x.reporterName ?? x.reporter_name ?? x.reporter ?? '-',
-    reporterRole: roleUp,
+    reporterRole: x.reporterRole ?? x.reporter_role ?? 'ROLE_USER',
     reason:       x.reason ?? x.code ?? x.detail ?? null,
     reportedAt:   x.reportedAt ?? x.createdAt ?? x.reported_at ?? null,
   }
@@ -288,7 +265,7 @@ function formatDate(v) {
   } catch { return '' }
 }
 
-// 필터(클라이언트)
+// 필터
 const filteredReviews = computed(() => {
   const k = q.value.toLowerCase()
   return rowsReviews.value.filter(r => {
@@ -304,7 +281,7 @@ const filteredReports = computed(() => {
   return rowsReports.value.filter(x => {
     if (minRating.value && x.rating < minRating.value) return false
     if (maxRating.value && x.rating > maxRating.value) return false
-    // (ownerOnly 필터 제거됨)
+    if (ownerOnly.value && x.reporterRole !== 'ROLE_OWNER') return false
     if (!k) return true
     return [x.hotelName, x.userName, x.comment, x.reporterName, x.reason].filter(Boolean).some(v => String(v).toLowerCase().includes(k))
   })
@@ -327,8 +304,7 @@ async function fetchReviews() {
 async function fetchReports() {
   loading.value = true
   try {
-    // ownerOnly 파라미터 제거
-    const res = await adminFetchReports({ minRating: minRating.value, maxRating: maxRating.value, q: q.value })
+    const res = await adminFetchReports({ minRating: minRating.value, maxRating: maxRating.value, ownerOnly: ownerOnly.value, q: q.value })
     const list = Array.isArray(res?.content) ? res.content : Array.isArray(res) ? res : []
     rowsReports.value = list.map(normReport)
   } catch (e) {
@@ -352,30 +328,35 @@ async function remove(reviewId) {
   }
 }
 
-// 상세
+// 상세 열기: 리뷰 탭에서
 function openDetail(row) {
   detail.value.open = true
-  detail.value.data = { ...row }
+  detail.value.data = { ...row } // rating/comment 포함됨
   loadPhotos(row.id)
 }
+// 상세 열기: 신고 탭에서 (리뷰ID 기준으로)
 function openDetailFromReport(rep) {
   detail.value.open = true
+  // 신고행에도 rating/comment가 있으니 우선 채워두고 사진 fetch
   detail.value.data = normReview({
     id: rep.id,
     hotelName: rep.hotelName,
     userName: rep.userName,
     rating: rep.rating,
     comment: rep.comment,
-    createdAt: rep.reportedAt
+    createdAt: rep.reportedAt // 없으면 포맷에서 처리됨
   })
   loadPhotos(rep.id)
 }
+
 async function loadPhotos(reviewId) {
   detail.value.loadingPhotos = true
   detail.value.photos = []
   try {
+    // 백엔드: GET /api/admin/reviews/{id} → { id, rating, comment, photos: string[], ... }
     const res = await adminFetchReviewDetail(reviewId)
     const photos = res?.photos || res?.content || []
+    // 상세 응답에 rating/comment가 더 최신이면 병합
     detail.value.data = { ...detail.value.data, ...res }
     detail.value.photos = photos
   } catch (e) {
@@ -386,20 +367,12 @@ async function loadPhotos(reviewId) {
 }
 
 function closeDetail(){ detail.value.open = false; detail.value.photos = []; detail.value.data = null }
+
 function showToast(msg){ toast.value = msg; setTimeout(()=> toast.value='', 1500) }
 
 onMounted(() => {
   fetchReviews()
   fetchReports()
-})
-
-// 필요시 서버 재조회(소프트)
-watch([minRating, maxRating, q], () => {
-  if (tab.value === 'reports') fetchReports()
-})
-watch(tab, (t) => {
-  if (t === 'reports') fetchReports()
-  else fetchReviews()
 })
 </script>
 
@@ -448,10 +421,6 @@ watch(tab, (t) => {
 .table-row:hover{ background:#fcfdff }
 .table-row.clickable{ cursor:pointer }
 
-/* owner 신고 행 하이라이트 */
-.ownerRow{ background:#ecfdf5 !important } /* 옅은 초록 */
-.ownerRow:hover{ background:#d1fae5 !important }
-
 .reviews-grid{ grid-template-columns: 80px 1.4fr 1fr 90px 150px 130px }
 .reports-grid{ grid-template-columns: 80px 1.4fr 1fr 1fr 1.8fr 150px 130px }
 
@@ -463,8 +432,7 @@ watch(tab, (t) => {
 .badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-weight:800; font-size:12px; background:#eef2ff; color:#475569 }
 .badge.ok{ background:#0f172a; color:#fff }
 .badge.no{ background:#f1f5f9; color:#64748b }
-/* owner 배지 색도 살짝 초록톤 */
-.badge.owner{ background:#dcfce7; color:#065f46; border:1px solid #bbf7d0 }
+.badge.owner{ background:#fef3c7; color:#a16207; border:1px solid #fde68a }
 
 .actions-col{ display:flex; align-items:center; justify-content:center; gap:6px }
 .btn{ padding:6px 10px; border-radius:10px; border:0; cursor:pointer; font-weight:800; font-size:12px }

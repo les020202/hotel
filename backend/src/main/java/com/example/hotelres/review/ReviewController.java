@@ -1,15 +1,17 @@
 // src/main/java/com/example/hotelres/review/ReviewController.java
 package com.example.hotelres.review;
 
-import com.example.hotelres.review.dto.ReviewDtos.*;
-import lombok.RequiredArgsConstructor;
+import com.example.hotelres.review.dto.ReviewDtos.EligibilityResponse;
+import com.example.hotelres.review.dto.ReviewDtos.ListResponse;
+import com.example.hotelres.review.dto.ReviewDtos.RatingResponse;
+import com.example.hotelres.review.dto.ReviewDtos.ReportRequest;
+import com.example.hotelres.review.dto.ReviewDtos.ReviewItem;
+import lombok.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -38,9 +40,9 @@ public class ReviewController {
     @GetMapping("/hotels/{hotelId}/reviews/eligibility")
     @PreAuthorize("isAuthenticated()")
     public EligibilityResponse eligibility(@PathVariable Long hotelId,
-                                           @AuthenticationPrincipal(expression = "username") String loginId) {
+                                           @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
         Long userId = userRepository.findIdByLoginId(loginId)
-                .orElseThrow(() -> new IllegalStateException("사용자 ID를 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
         return reviewService.checkEligibility(hotelId, userId);
     }
 
@@ -55,31 +57,47 @@ public class ReviewController {
                              @RequestParam("rating") Short rating,
                              @RequestParam(value = "comment", required = false) String comment,
                              @RequestParam(value = "photo", required = false) MultipartFile photo,
-                             @AuthenticationPrincipal(expression = "username") String loginId) {
+                             @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
 
         Long userId = userRepository.findIdByLoginId(loginId)
-                .orElseThrow(() -> new IllegalStateException("사용자 ID를 찾을 수 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
         return reviewService.create(hotelId, bookingId, userId, rating, comment, photo);
     }
 
-    /** 리뷰 신고 */
+    /** 리뷰 신고 (USER/OWNER 구분은 서비스 인자 isOwner=false로 처리) */
     @PostMapping("/reviews/{id}/report")
     @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT) // 성공 시 204
     public void report(@PathVariable Long id,
-                       @RequestBody ReportRequest req,
-                       @AuthenticationPrincipal User principal) {
-        reviewService.report(id, null, req.getReason());
+                       @RequestBody(required = false) ReportRequest req,
+                       @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
+
+        Long userId = userRepository.findIdByLoginId(loginId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
+
+        String reason = (req == null) ? null : req.getReason();
+        String detail = (req == null) ? null : req.getDetail();
+
+        reviewService.report(id, userId, reason, detail, false);
     }
 
-    // 추가
+    /** 내 리뷰 삭제 */
     @DeleteMapping("/reviews/{id}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT) // 204
     public void deleteMine(@PathVariable Long id,
-                           @AuthenticationPrincipal(expression = "username") String loginId) {
+                           @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
         Long userId = userRepository.findIdByLoginId(loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
         reviewService.deleteMine(id, userId);
     }
-
+    @Getter @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ReportRequest {
+        private String reason;        // 필수 아님: 서버에서 null/빈 값이면 "기타" 처리
+        private String detail;        // 선택
+        private String reporterType;  // 선택: 'USER' | 'OWNER' (보내지 않으면 서버 기본 USER)
+    }
 }

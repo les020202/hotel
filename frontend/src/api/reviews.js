@@ -39,12 +39,11 @@ export async function createReview(hotelId, { bookingId, rating, comment, photo 
   fd.append('rating', String(rating))
   if (comment) fd.append('comment', comment)
   if (photo)   fd.append('photo', photo) // 사진 1장
-
   return postMultipart(`/hotels/${hotelId}/reviews`, fd)
 }
 
 /**
- * 리뷰 사진 1장 업로드 (별도 엔드포인트를 쓸 경우)
+ * 리뷰 사진 업로드 (별도 엔드포인트를 쓰는 경우)
  * POST /api/reviews/{reviewId}/photo
  * multipart: file
  * -> { url }
@@ -62,8 +61,25 @@ export async function deleteReview(id) {
 /**
  * 리뷰 신고
  * POST /api/reviews/{reviewId}/report
- * body: { reason }
+ * 허용 입력:
+ *  - { reason } | { code } | { reasonCode }
+ *  - { detail }
+ *  - { reporterType }  // 서버가 쓰면 전달, 아니면 무시
  */
-export async function reportReview(reviewId, reason) {
-  return post(`/reviews/${reviewId}/report`, { reason })
+export async function reportReview(reviewId, payload = {}) {
+  // 다양한 키를 reason으로 정규화하고 공백/placeholder 제거
+  let reason =
+    (payload.reason ?? payload.code ?? payload.reasonCode ?? '')
+      .toString()
+      .trim()
+  if (reason === '선택' || reason === '선택하세요') reason = ''
+
+  const body = {
+    // 서버에서 null/빈 값은 "기타"로 처리하므로 프론트에서 막지 않는다.
+    reason: reason || null,
+    detail: (payload.detail ?? '').toString().trim() || null,
+  }
+  if (payload.reporterType) body.reporterType = payload.reporterType
+
+  return post(`/reviews/${reviewId}/report`, body)
 }

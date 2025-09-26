@@ -1,3 +1,4 @@
+// src/main/java/com/example/hotelres/owner/HotelOwnerRepository.java
 package com.example.hotelres.owner;
 
 import com.example.hotelres.owner.dto.OwnerHotelView;
@@ -9,14 +10,15 @@ import java.util.List;
 
 public interface HotelOwnerRepository extends JpaRepository<HotelOwner, Long> {
 
-    // Guard 용 (login_id, hotel_id)
+    // 가드용 (두 시그니처 모두 제공: 혼선 방지. 하나만 쓰고 싶으면 아래 중 1개만 남겨도 됨)
+    boolean existsByHotelIdAndUserLoginId(Long hotelId, String userLoginId);
     boolean existsByUserLoginIdAndHotelId(String userLoginId, Long hotelId);
 
-    // 내 호텔 ID만 뽑기 (Guard, 권한 필터링 등에 유용)
+    // 내 호텔 id 목록
     @Query("select ho.hotelId from HotelOwner ho where ho.userLoginId = :loginId")
     List<Long> findHotelIdsByOwnerLoginId(@Param("loginId") String loginId);
 
-    // 내 호텔 카드용 (Projection)
+    // 오너 대시보드 카드/목록 프로젝션 (네이티브)
     @Query(value = """
         SELECT h.id                       AS id,
                h.name                     AS name,
