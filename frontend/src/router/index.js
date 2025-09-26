@@ -6,10 +6,10 @@ import SignupView from '@/views/SignupView.vue'
 import LoginView from '@/views/LoginView.vue'
 import MainView from '@/views/MainView.vue'
 
-// 예약/결제
-import ReservationPage from '@/views/reservation/ReservationPage.vue'
-import PaymentSuccess from '@/views/reservation/PaymentSuccess.vue'
-import PaymentFail from '@/views/reservation/PaymentFail.vue'
+// 예약/결제 (페이지 본문은 지연 로딩으로)
+const ReservationPage = () => import('@/views/reservation/ReservationPage.vue')
+const PaymentSuccess  = () => import('@/views/reservation/PaymentSuccess.vue')
+const PaymentFail     = () => import('@/views/reservation/PaymentFail.vue')
 
 // 관리자
 import AdminLayout from '@/views/admin/AdminLayout.vue'
@@ -123,7 +123,19 @@ const router = createRouter({
       })
     },
 
-    // (router/index.js 안의 routes 배열에서 예약/결제 부분만 교체)
+    // ───────── 예약/결제 ─────────
+    // 예약 본문: 로그인 필요(비회원 접근 차단)
+    {
+      path: '/reservation',
+      name: 'Reservation',
+      component: ReservationPage,
+      meta: { requiresAuth: true }   // ★ 비회원 접근 불가
+    },
+    // Toss 콜백 / 성공·실패 화면만 공개
+    { path: '/reservation/success', name: 'PaySuccess', component: PaymentSuccess, meta: { public: true } },
+    { path: '/reservation/fail',    name: 'PayFail',    component: PaymentFail,    meta: { public: true } },
+    { path: '/pay/success', component: PaymentSuccess, meta: { public: true } },
+    { path: '/pay/fail',    component: PaymentFail,    meta: { public: true } },
 
 // 예약/결제 (콜백은 비로그인 허용)
 {
@@ -177,21 +189,35 @@ const router = createRouter({
         { path: 'hotels',       name: 'AdminHotels',      component: () => import('@/views/admin/AdminHotelManage.vue'), meta: { title: '호텔 관리' } },
         { path: 'hotel-audit',  name: 'AdminHotelAudit',  component: () => import('@/views/admin/AdminHotelAudit.vue'),  meta: { title: '호텔 심사' } },
 
-        // ✅ 관리자 고객지원 루트
-        { path: 'support',        component: () => import('@/views/admin/support/SupportLayout.vue') ,
+        // 관리자 고객지원 루트
+        {
+          path: 'support',
+          component: AdminSupportLayout,
           children: [
             { path: '', redirect: '/admin/support/notices' },
-            { path: 'notices',  component: () => import('@/views/admin/support/Notices.vue') },
-            { path: 'faqs',     component: () => import('@/views/admin/support/Faqs.vue') },
-            { path: 'tickets',  component: () => import('@/views/admin/support/Tickets.vue') },
+            { path: 'notices',  component: AdminSupportNotices },
+            { path: 'faqs',     component: AdminSupportFaqs },
+            { path: 'tickets',  component: AdminSupportTickets },
             { path: 'tickets/:id', component: () => import('@/views/admin/support/TicketDetail.vue'), props: true },
           ]
         },
       ]
     },
 
-    { path: '/403', component: Forbidden },
-    { path: '/:pathMatch(.*)*', redirect: '/main' },
+    // ───────── owner 전용 라우트 추가 ─────────
+{
+  path: '/owner',
+  component: OwnerLayout,
+  meta: { requiresAuth: true, requiresOwner: true },
+  children: [
+    { path: 'hotels/:hotelId', component: OwnerDashboard },
+    { path: 'hotels/:hotelId/inventory', component: OwnerInventory },
+    { path: 'hotels/:hotelId/bookings', component: OwnerBookings },
+    { path: 'hotels/:hotelId/assign', component: AssignView },
+    { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') }
+  ]
+},
+
 
     // 마이페이지
     {
@@ -204,41 +230,26 @@ const router = createRouter({
         { path: 'coupon', component: Coupons },
         { path: 'history', component: History },
         { path: 'support', component: Support },
-        // 두 파일에 있던 Payment / AddCard 라우트도 추가
         { path: 'payment', component: Payment },
         { path: 'add-card', component: AddCard },
         { path: 'bookings', name: 'MyBookings', component: () => import('@/views/mypage/MyBookings.vue') },
-    { path: 'bookings/:id', name: 'MyBookingDetail', component: () => import('@/views/mypage/MyBookingDetail.vue'), props: true },
-        
+        { path: 'bookings/:id', name: 'MyBookingDetail', component: () => import('@/views/mypage/MyBookingDetail.vue'), props: true },
+	      { path: 'bookings/:id/ticket', name: 'MyBookingTicket', component: () => import('@/views/mypage/MyBookingTicket.vue'), props: true },
       ]
     },
 
     // 고객지원(퍼블릭)
-    { path: '/support/notice', component: NoticeList },
-    { path: '/support/notice/:id', component: NoticeDetail },
-    { path: '/support/faq', component: FaqList },
-    { path: '/support/faq/:id', component: FaqDetail },
-    { path: '/support/contact', component: ContactCenter },
-    { path: '/support/contact/inquiry', component: SupportInquiry },
-    { path: '/support/contact/my', component: MyTickets },
-    { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true },
+    { path: '/support/notice', component: NoticeList,  meta: { public: true } },
+    { path: '/support/notice/:id', component: NoticeDetail, meta: { public: true } },
+    { path: '/support/faq', component: FaqList, meta: { public: true } },
+    { path: '/support/faq/:id', component: FaqDetail, meta: { public: true } },
+    { path: '/support/contact', component: ContactCenter, meta: { public: true } },
+    { path: '/support/contact/inquiry', component: SupportInquiry, meta: { public: true } },
+    { path: '/support/contact/my', component: MyTickets, meta: { requiresAuth: true } },
+    { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true, meta: { requiresAuth: true } },
 
     // 찜
-    { path: '/wishlist', name: 'Wishlist', component: Wishlist },
-
-    // 오너 (ROLE_OWNER)
-    {
-      path: '/owner',
-      component: OwnerLayout,
-      meta: { requiresAuth: true, requiresOwner: true },
-      children: [
-        { path: 'hotels/:hotelId', component: OwnerDashboard },
-        { path: 'hotels/:hotelId/inventory', component: OwnerInventory },
-        { path: 'hotels/:hotelId/bookings', component: OwnerBookings },
-        { path: 'hotels/:hotelId/assign', component: AssignView },
-        { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') },
-      ]
-    },
+    { path: '/wishlist', name: 'Wishlist', component: Wishlist, meta: { requiresAuth: true } },
 
     { path: '/403', component: Forbidden },
     { path: '/:pathMatch(.*)*', redirect: '/main' }
@@ -247,6 +258,7 @@ const router = createRouter({
 
 // 전역 가드: 소셜 로그인 리다이렉트 + 인증/역할 체크 + 날짜 정규화
 router.beforeEach((to, from, next) => {
+  // 토큰을 해시/쿼리에서 회수 (소셜 리다이렉트 케이스)
   const hash = to.hash || window.location.hash
   const m = hash && hash.match(/token=([^&]+)/)
   const tokenFromHash = m ? decodeURIComponent(m[1]) : null
@@ -258,18 +270,29 @@ router.beforeEach((to, from, next) => {
   }
 
   const token = localStorage.getItem('token')
-  const isPublic = to.meta?.public === true
- const isPayCallback = to.path.startsWith('/pay/') || to.path.startsWith('/reservation/')
 
-  // 2) 인증 필요 라우팅
-  if (!isPublic && !isPayCallback && to.meta.requiresAuth && !token) {
-    return next('/login')
+  const isPublic = to.matched.some(r => r.meta?.public)
+  const requiresAuth = to.matched.some(r => r.meta?.requiresAuth)
+
+  // 공개로 열어둘 결제 콜백 경로만 예외
+  const PUBLIC_CALLBACK_PATHS = new Set([
+    '/pay/success', '/pay/fail',
+    '/reservation/success', '/reservation/fail'
+  ])
+  const isPayCallback = PUBLIC_CALLBACK_PATHS.has(to.path)
+
+  // 인증 필요한 페이지 접근 차단
+  if (!isPublic && !isPayCallback && requiresAuth && !token) {
+    const redirect = encodeURIComponent(to.fullPath)
+    return next(`/login?redirect=${redirect}`)
   }
 
+  // 로그인/회원가입 진입 시 토큰 있으면 메인으로
   if (!isPayCallback && (to.path === '/login' || to.path === '/signup') && token) {
     return next('/main')
   }
 
+  // 역할 체크 (관리자 라우트 등)
   const needRoles = to.meta?.roles || []
   if (needRoles.length) {
     const user = token ? parseJwt(token) : null
@@ -279,6 +302,7 @@ router.beforeEach((to, from, next) => {
     }
   }
 
+  // 오너 권한 체크
   if (to.matched.some(r => r.meta && r.meta.requiresOwner)) {
     const claims = parseJwt(token)
     if (!hasOwnerRole(claims)) {
@@ -286,6 +310,7 @@ router.beforeEach((to, from, next) => {
     }
   }
 
+  // 검색/상세 진입 시 날짜 정규화
   const needDates = to.name === 'search' || to.name === 'hotel-detail'
   if (needDates) {
     const q = { ...(to.query || {}) }

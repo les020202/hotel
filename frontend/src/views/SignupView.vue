@@ -462,15 +462,57 @@ onBeforeUnmount(() => {
 
           <!-- 약관 동의 -->
           <label class="agree">
-            <input type="checkbox" v-model="agree" required />
-            <span>
-              개인정보 이용에 동의하시겠습니까?
-              <button class="link-button" @click="showTerms = true">[상세보기]</button>
-            </span>
-          </label>
+    <input type="checkbox" v-model="agree" required />
+    <span>
+      개인정보 이용에 동의하시겠습니까?
+      <button class="link-button" @click="showTerms = true">[상세보기]</button>
+    </span>
+  </label>
 
-          <!-- 모달 (동일) -->
-          <!-- ... 그대로 ... -->
+  <!-- 모달 -->
+  <div v-if="showTerms" class="modal-overlay" @click.self="showTerms = false">
+    <div class="modal">
+      <h3>개인정보 수집 및 이용 동의</h3>
+      
+      <p><strong>1. 수집하는 개인정보 항목</strong></p>
+      <ul>
+        <li>필수 항목: 이름, 생년월일, 아이디, 비밀번호, 이메일, 휴대전화번호</li>
+        <li>선택 항목: 성별</li>
+      </ul>
+
+      <p><strong>2. 수집 목적</strong></p>
+      <ul>
+        <li>회원 가입 의사 확인 및 본인 식별/인증</li>
+        <li>예약 서비스 제공 및 상담</li>
+        <li>고지사항 전달 및 고객 대응</li>
+      </ul>
+
+      <p><strong>3. 보유 및 이용 기간</strong></p>
+      <ul>
+        <li>회원 탈퇴 후 5일까지 (분쟁 해결 및 소비자 보호 목적)</li>
+        <li>관련 법령에 따라 별도 보관 시 해당 법령의 보유 기간 준수</li>
+      </ul>
+
+      <p><strong>4. 동의 거부 권리</strong></p>
+      <ul>
+        <li>이용자는 개인정보 수집 및 이용에 대한 동의를 거부할 수 있습니다.</li>
+        <li>다만, 동의하지 않을 경우 회원 가입 및 서비스 이용이 제한될 수 있습니다.</li>
+      </ul>
+
+      <p><strong>5. 관련 법령 고지</strong></p>
+      <ul>
+        <li>「개인정보 보호법」 제15조 (개인정보의 수집·이용)</li>
+        <li>「정보통신망 이용촉진 및 정보보호 등에 관한 법률」 제22조 (개인정보의 수집·이용 동의 등)</li>
+      </ul>
+
+      <p>자세한 내용은 <strong>개인정보 처리방침</strong>을 참고해 주세요.</p>
+
+      <!-- 닫기 버튼 -->
+      <div style="text-align: right; margin-top: 16px;">
+        <button class="link-button" @click="showTerms = false">닫기</button>
+      </div>
+    </div>
+  </div>
 
           <div class="row between hint">
             <span>계정이 있으신가요?</span>

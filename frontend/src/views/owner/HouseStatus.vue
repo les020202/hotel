@@ -1,7 +1,7 @@
 <script setup lang="js">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '@/lib/api'
+import { api } from '@/lib/api'
 
 const route = useRoute()
 const hotelId = computed(() => Number(route.params.hotelId))

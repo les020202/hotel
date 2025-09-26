@@ -1,97 +1,27 @@
-<template>
-  <!-- 카드 간격은 여기서 통제 -->
-  <ul class="card-list">
-    <li
-      v-for="h in items"
-      :key="h.hotelId"
-      class="hotel-card"
-      @click="goDetail(h)"
-      role="button"
-    >
-      <div class="hotel-row">
-        <!-- 좌측: 이미지 -->
-        <figure class="img-wrap">
-          <img :src="h.coverImageUrl || placeholder" alt="" class="img" loading="lazy" />
-          <span class="badge">12 images</span>
-        </figure>
-
-        <!-- 우측: 정보 -->
-        <div class="info">
-          <div class="title-price">
-            <h3 class="title">{{ h.name }}</h3>
-            <div class="price-box">
-              <div class="price-caption">starting from</div>
-              <div class="price">₩{{ money(h.startingFrom) }}</div>
-            </div>
-          </div>
-
-          <div class="addr">
-            <span class="pin" aria-hidden="true">📍</span>
-            <span>{{ h.address || h.region || '' }}</span>
-          </div>
-
-          <!-- 성급 -->
-          <div class="stars-line">
-            <div class="stars" :aria-label="`${h.gradeLevel || 0} star hotel`">
-              <span v-for="i in (h.gradeLevel || 0)" :key="i">★</span>
-            </div>
-            <span class="gray">{{ (h.gradeLevel || 0) }} Star Hotel</span>
-            <span class="dot">•</span>
-            <span class="gray">Amenities</span>
-          </div>
-
-          <div class="rating-line">
-            <div class="rating-box">
-              {{ h.rating != null ? h.rating.toFixed(1) : '—' }}
-            </div>
-            <div class="rating-label">{{ ratingLabel(h.rating) }}</div>
-          </div>
-
-          <div class="cta" @click.stop>
-            <button
-              class="wish"
-              @click="toggleWish(h)"
-              :aria-pressed="isWished(h.hotelId)"
-              :title="isWished(h.hotelId) ? '위시리스트 제거' : '위시리스트 추가'"
-            >
-              <svg v-if="isWished(h.hotelId)" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6.5 3.5 5 5.5 5c1.7 0 3.25 1.03 3.97 2.57h1.06C11.25 6.03 12.8 5 14.5 5 16.5 5 18 6.5 18 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" class="w-6 h-6 stroke-gray-700 fill-none">
-                <path stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
-                      d="M12.1 20.3C7.14 15.78 4 12.94 4 9.5 4 7.5 5.5 6 7.5 6c1.54 0 3.04.99 3.57 2.36h1.87C13.46 6.99 14.96 6 16.5 6 18.5 6 20 7.5 20 9.5c0 3.44-3.14 6.28-8.1 10.8z"/>
-              </svg>
-            </button>
-
-            <button class="view" @click="goDetail(h)">
-              View Place
-            </button>
-          </div>
-        </div>
-      </div>
-    </li>
-  </ul>
-</template>
-
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, onActivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { addWishlist, removeWishlist } from '@/api/wishlistApi.js'
+import {
+  ensureWishlistLoaded,
+  toggleWishlist,
+  syncHotels,
+  isWished,
+  wishlistSignal,       // ⬅️ 시그널
+} from '@/api/wishlistApi'
+import { getMe } from '@/api/auth'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
   checkIn: { type: String, default: null },
   checkOut: { type: String, default: null },
-  guests: { type: Number, default: 1 }        // ✅ 추가: 인원 값을 부모로부터 받음
+  guests: { type: Number, default: 1 }
 })
 
 const router = useRouter()
-const wished = ref(new Set())
 const placeholder = 'https://placehold.co/800x600?text=Hotel'
 
-const money = (v) => (v == null ? '-' : new Intl.NumberFormat('ko-KR').format(v))
-
-const ratingLabel = (r) => {
+const money = v => (v == null ? '-' : new Intl.NumberFormat('ko-KR').format(Number(v)))
+const ratingLabel = r => {
   if (r == null) return ''
   const x = Number(r)
   if (x === 5.0) return 'amazing'
@@ -102,36 +32,108 @@ const ratingLabel = (r) => {
   if (x >= 2.5) return 'not bad'
   return 'bad'
 }
+function safeImg(u){ return (!u || typeof u !== 'string') ? placeholder : (u.startsWith('http') || u.startsWith('/')) ? u : placeholder }
 
-const isWished = (id) => wished.value.has(id)
-
-async function toggleWish(h) {
-  try {
-    if (isWished(h.hotelId)) {
-      await removeWishlist(h.hotelId)
-      wished.value.delete(h.hotelId)
-    } else {
-      await addWishlist(h.hotelId)
-      wished.value.add(h.hotelId)
-    }
-  } catch (e) {
-    console.error('wishlist error', e)
-  }
+// 🔔 시그널을 읽는 더미 computed → 의존성 연결
+const wishTick = computed(() => wishlistSignal.value)
+function isWishedComputed(hotelId) {
+  void wishTick.value
+  return isWished(Number(hotelId) || 0)
 }
 
-// ✅ 상세 이동 시 /search에서 선택한 checkIn/checkOut/guests를 그대로 전달
+async function onToggle(hotelId) {
+  try { await getMe() }
+  catch {
+    const redirect = encodeURIComponent(location.pathname + location.search)
+    router.push(`/login?redirect=${redirect}`); return
+  }
+  try { await toggleWishlist(Number(hotelId) || 0) }
+  catch (e) { console.error('wishlist error', e) }
+}
+
 function goDetail(h) {
   router.push({
-    name: 'hotel-detail',                // name 사용 권장(라우트 변경에도 안전)
+    name: 'hotel-detail',
     params: { id: h.hotelId },
-    query: {
-      checkIn: props.checkIn,
-      checkOut: props.checkOut,
-      guests: props.guests ?? 1
-    }
+    query: { checkIn: props.checkIn, checkOut: props.checkOut, guests: props.guests ?? 1 }
   })
 }
+
+onMounted(async () => {
+  await ensureWishlistLoaded()
+  const ids = (props.items || []).map(it => Number(it.hotelId)).filter(Boolean)
+  if (ids.length) await syncHotels(ids)   // 화면에 보이는 것만 재검증
+})
+
+// BFCache 복귀 시 재검증
+function onPageShow(e){ if (e.persisted) {
+  const ids = (props.items || []).map(it => Number(it.hotelId)).filter(Boolean)
+  if (ids.length) syncHotels(ids)
+}}
+window.addEventListener('pageshow', onPageShow)
+
+onActivated(() => {
+  const ids = (props.items || []).map(it => Number(it.hotelId)).filter(Boolean)
+  if (ids.length) syncHotels(ids)
+})
+onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow))
 </script>
+
+<template>
+  <ul class="card-list">
+    <li v-for="h in items" :key="h.hotelId" class="hotel-card" @click="goDetail(h)" role="button">
+      <div class="hotel-row">
+        <figure class="img-wrap">
+          <img :src="safeImg(h.coverImageUrl) || placeholder" alt="" class="img" loading="lazy" />
+          <span class="badge">12 images</span>
+        </figure>
+
+        <div class="info" @click.stop>
+          <div class="title-price">
+            <h3 class="title">{{ h.name }}</h3>
+            <div class="price-box">
+              <div class="price-caption">starting from</div>
+              <div class="price">₩{{ money(h.startingFrom) }}</div>
+            </div>
+          </div>
+
+          <div class="addr"><span class="pin">📍</span><span>{{ h.address || h.region || '' }}</span></div>
+
+          <div class="stars-line">
+            <div class="stars" :aria-label="`${h.gradeLevel || 0} star hotel`">
+              <span v-for="i in (h.gradeLevel || 0)" :key="i">★</span>
+            </div>
+            <span class="gray">{{ (h.gradeLevel || 0) }} Star Hotel</span>
+            <span class="dot">•</span>
+            <span class="gray">Amenities</span>
+          </div>
+
+          <div class="rating-line">
+            <div class="rating-box">{{ h.rating != null ? Number(h.rating).toFixed(1) : '—' }}</div>
+            <div class="rating-label">{{ ratingLabel(h.rating) }}</div>
+          </div>
+
+          <div class="cta">
+            <button class="wish"
+              @click.stop="onToggle(h.hotelId)"
+              :aria-pressed="isWishedComputed(h.hotelId)"
+              :title="isWishedComputed(h.hotelId) ? '위시리스트 제거' : '위시리스트 추가'">
+              <svg v-if="isWishedComputed(h.hotelId)" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6.5 3.5 5 5.5 5c1.7 0 3.25 1.03 3.97 2.57h1.06C11.25 6.03 12.8 5 14.5 5 16.5 5 18 6.5 18 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" class="w-6 h-6 stroke-gray-700 fill-none">
+                <path stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
+                      d="M12.1 20.3C7.14 15.78 4 12.94 4 9.5 4 7.5 5.5 6 7.5 6c1.54 0 3.04.99 3.57 2.36h1.87C13.46 6.99 14.96 6 16.5 6 18.5 6 20 7.5 20 9.5c0 3.44-3.14 6.28-8.1 10.8z"/>
+              </svg>
+            </button>
+
+            <button class="view" @click.stop="goDetail(h)">View Place</button>
+          </div>
+        </div>
+      </div>
+    </li>
+  </ul>
+</template>
 
 <style scoped>
 /* 리스트 컨테이너: 카드 간격 넓힘 */
@@ -241,13 +243,31 @@ function goDetail(h) {
 
 /* CTA */
 .cta{
-  margin-top: auto; padding-top: 1rem;
-  display: flex; align-items: center; gap: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* 우측 정렬 */
+  gap: 1rem;
 }
+
+/* 하트 버튼: 가운데 정렬 */
 .wish{
-  width: 3rem; height: 3rem; border: 1px solid #e5e7eb;
-  border-radius: .75rem; background: #fff;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid #e5e7eb;
+  border-radius: .75rem;
+  background: #fff;
+  display: grid;           /* 가운데 정렬 핵심 */
+  place-items: center;     /* 수평+수직 가운데 */
+  padding: 0;              /* 여백 제거(있다면) */
 }
+
+/* 아이콘의 인라인 베이스라인 공간 제거 */
+.wish svg{
+  display: block;
+}
+
 .wish:hover{ background: #f9fafb; }
 .view{
   flex: 1 1 auto; background: #059669; color: #fff; font-weight: 600;

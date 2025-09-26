@@ -6,6 +6,13 @@ import HotelList from "@/components/HotelList.vue";
 import FiltersSidebar from "@/components/FiltersSidebar.vue";
 import { fetchHotels } from "@/api/searchApi.js";
 
+/* ✅ 위시 동기화 유틸 */
+import {
+  ensureWishlistLoaded,
+  syncHotels,
+  wishlistSignal, // 필요 시 :key 등에 쓰고 싶다면 사용
+} from "@/api/wishlistApi";
+
 const route = useRoute(), router = useRouter();
 
 const q        = ref("");
@@ -67,6 +74,10 @@ function syncFromRoute() {
   children.value = rq.children != null ? Number(rq.children) : 0;
 }
 
+/* 현재 화면에 보이는 호텔 ID 목록 (위시 동기화용) */
+const visibleHotelIds = computed(() =>
+  (items.value || []).map(it => Number(it.hotelId)).filter(Boolean)
+);
 
 /* ✅ 페이지 로드 */
 async function loadPage(offset=0, append=false) {
@@ -101,6 +112,11 @@ async function loadPage(offset=0, append=false) {
     total.value = res.total ?? null;
     hasMore.value = res.hasMore ?? (list.length === limit);
     nextOffset.value = res.nextOffset ?? (offset + list.length);
+
+    // 💡 로드 직후 현재 보이는 호텔들 서버 상태와 동기화
+    if (visibleHotelIds.value.length) {
+      syncHotels(visibleHotelIds.value);
+    }
   } catch (e) {
     console.error(e);
     errorMsg.value = "목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
@@ -135,20 +151,19 @@ function onSubmit(payload){
   children.value = Number(payload.children);
 
   // ✅ URL에 q와 region 둘 다 넣기, guests도 넣어주기
- router.replace({
-  name: "search",
-  query: {
-    q: q.value,
-    region: q.value,
-    checkIn: checkIn.value,
-    checkOut: checkOut.value,
-    guests: String(adults.value),
-    adults: String(adults.value),
-    children: String(children.value),
-    offset: "0",
-  },
-});
-
+  router.replace({
+    name: "search",
+    query: {
+      q: q.value,
+      region: q.value,
+      checkIn: checkIn.value,
+      checkOut: checkOut.value,
+      guests: String(adults.value),
+      adults: String(adults.value),
+      children: String(children.value),
+      offset: "0",
+    },
+  });
 }
 
 /* 필터 변경 → 최상단 스크롤 후 즉시 재조회 */
@@ -193,14 +208,49 @@ watch(
   { immediate: true }
 );
 
-onMounted(() => {
+/* ✅ 리스트가 바뀌면 현재 보이는 호텔들 위시 상태를 서버와 동기화 */
+watch(
+  visibleHotelIds,
+  (ids) => { if (ids.length) syncHotels(ids); }
+);
+
+onMounted(async () => {
   supportsIO.value = typeof window !== "undefined" && "IntersectionObserver" in window;
+
+  // 전역 위시 데이터 1회 로드
+  await ensureWishlistLoaded();
+
   window.addEventListener("scroll", onScroll, { passive: true });
+
+  // ✅ BFCache(뒤로가기) 복귀 시 동기화
+  window.addEventListener("pageshow", onPageShow);
+
+  // ✅ 탭 재활성화 시 동기화
+  document.addEventListener("visibilitychange", onVisibility);
 });
+
 onBeforeUnmount(() => {
   teardownIO();
   window.removeEventListener("scroll", onScroll);
+  window.removeEventListener("pageshow", onPageShow);
+  document.removeEventListener("visibilitychange", onVisibility);
 });
+
+/* BFCache 복귀 핸들러 */
+function onPageShow(e){
+  if (e.persisted) {
+    const ids = visibleHotelIds.value;
+    if (ids.length) syncHotels(ids);
+  }
+}
+
+/* 탭 재활성화 핸들러 */
+function onVisibility(){
+  if (document.visibilityState === "visible") {
+    const ids = visibleHotelIds.value;
+    if (ids.length) syncHotels(ids);
+  }
+}
 
 const totalLabel = computed(() => total.value==null? "" : `${total.value.toLocaleString("ko-KR")}개`);
 </script>

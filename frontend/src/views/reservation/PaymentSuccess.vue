@@ -62,6 +62,9 @@
 
       <div class="btns">
         <button class="btn" type="button" :disabled="confirming" @click="router.push('/')">처음으로</button>
+        <button class="btn ghost" type="button" :disabled="confirming" @click="router.push('/mypage/history')">
+          예약내역으로
+        </button>
       </div>
     </div>
   </div>
@@ -70,8 +73,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-//import api from '@/api/auth' // axios 인스턴스 (baseURL이 /api 면 '/payments/..'로 호출하면 /api/payments/..로 나감)
 import { confirmPayment } from '@/api/payments'
+
 const route = useRoute()
 const router = useRouter()
 
@@ -145,14 +148,17 @@ async function confirmOnServer () {
 
     // ⚠️ 서버 시큐리티에 허용된 경로와 반드시 동일해야 함
     // SecurityConfig: .requestMatchers(HttpMethod.POST, "/api/payments/toss/confirm").permitAll()
-  const data = await confirmPayment({
-   paymentKey: paymentKey.value,
-   orderId:    orderId.value,
-   amount:     Number(amount.value),
-   holdCode:   holdCode.value || undefined
- })
+    const data = await confirmPayment({
+      paymentKey: paymentKey.value,
+      orderId:    orderId.value,
+      amount:     Number(amount.value),
+      holdCode:   holdCode.value || undefined
+    })
 
     resp.value = data
+
+    // ✅ 브라우저 alert로 알림
+    window.alert('예약이 확정되었어요. 메일을 확인해주세요.')
 
     // 민감 파라미터가 URL에 남지 않도록 정리 (bookingId만 유지)
     localStorage.removeItem('holdCode')
@@ -183,8 +189,8 @@ onMounted(() => {
     router.replace({ path: '/reservation/fail', query: { message: '예상치 못한 오류', code: 'UNKNOWN' } })
   })
 })
-console.log('[SUCCESS PAGE]', route.query.paymentKey, route.query.orderId, route.query.amount, route.query.holdCode)
 
+console.log('[SUCCESS PAGE]', route.query.paymentKey, route.query.orderId, route.query.amount, route.query.holdCode)
 </script>
 
 <style scoped>
@@ -197,5 +203,6 @@ console.log('[SUCCESS PAGE]', route.query.paymentKey, route.query.orderId, route
 pre{background:#f9fafb;padding:10px;border-radius:8px;font-size:12px;color:#374151;overflow:auto}
 .btns{margin-top:24px;display:flex;gap:8px}
 .btn{padding:10px 14px;border-radius:8px;background:#1b64da;color:#fff;border:none;cursor:pointer}
+.btn.ghost{background:#f3f4f6;color:#111827}
 .btn:disabled{opacity:.6;cursor:not-allowed}
 </style>

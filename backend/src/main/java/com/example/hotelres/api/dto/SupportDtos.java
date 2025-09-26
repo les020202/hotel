@@ -69,6 +69,7 @@ public class SupportDtos {
     public record MessageRes(
         Long id,                 // 메시지 ID
         Long senderId,           // 보낸 사람 ID
+        String senderRole, 
         String content,          // 메시지 내용
         LocalDateTime createdAt  // 작성일시
     ) {}
