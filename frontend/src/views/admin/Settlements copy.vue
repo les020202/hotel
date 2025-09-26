@@ -189,7 +189,7 @@
         <TableSkeleton v-if="loading.statements" />
         <template v-else>
           <EmptyState v-if="!hotelId" text="호텔을 선택하면 해당 호텔의 정산서가 표시됩니다." />
-          <EmptyState v-else-if="!statements?.length" text="정산서가 이미 생성되었습니다. ‘완료’를 눌러 확인해보세요." />
+          <EmptyState v-else-if="!statements?.length" text="정산서가 없습니다. ‘정산서 생성’을 눌러 생성해보세요." />
           <div v-else class="table-wrap">
             <table class="table" aria-label="정산서 목록">
               <thead>
@@ -206,7 +206,7 @@
               </thead>
               <tbody>
                 <tr v-for="s in statements" :key="s.id">
-                 <td class="hide-md" data-label="호텔">{{ hotelMap[s.hotelId] ?? ('#'+s.hotelId) }}</td>
+                  <td class="hide-md" data-label="ID">#{{ s.id }}</td>
                   <td data-label="기간">{{ s.periodStart }} ~ {{ s.periodEnd }}</td>
                   <td data-label="상태"><span :class="['badge', s.status==='SETTLED' ? 'ok' : 'plan']">{{ s.status }}</span></td>
                   <td class="tr strong" data-label="지급금액">{{ won(s.payableAmount) }}</td>
@@ -227,44 +227,36 @@
       <div v-else>
         <TableSkeleton v-if="loading.settled" />
         <template v-else>
-  <EmptyState 
-    v-if="!settled?.length" 
-    :text="hotelId 
-      ? '이 호텔의 완료된 정산서가 없습니다.' 
-      : '완료된 정산서가 없습니다.'"
-  />
-  <div v-else class="table-wrap">
-    <table class="table" aria-label="완료된 정산서 목록">
-      <thead>
-        <tr>
-          <th class="hide-md">ID</th>
-          <th>기간</th>
-          <th>상태</th>
-          <th class="tr">지급금액</th>
-          <th class="hide-sm">지급계좌</th>
-          <th class="hide-sm">생성</th>
-          <th>확정</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="s in settled" :key="s.id">
-          <td class="hide-md" data-label="호텔">{{ hotelMap[s.hotelId] ?? ('#'+s.hotelId) }}</td>
-          <td data-label="기간">{{ s.periodStart }} ~ {{ s.periodEnd }}</td>
-          <td data-label="상태">
-            <span class="badge ok">SETTLED</span>
-          </td>
-          <td class="tr strong" data-label="지급금액">{{ won(s.payableAmount) }}</td>
-          <td class="hide-sm" data-label="계좌">
-            {{ s.payoutBankCode }} / {{ s.payoutAccountNo }} / {{ s.payoutHolderName }}
-          </td>
-          <td class="hide-sm" data-label="생성">{{ dt(s.createdAt) }}</td>
-          <td data-label="확정">{{ s.settledAt ? dt(s.settledAt) : '-' }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</template>
+          <div class="row">
+            <div class="buttons right">
+              <button class="btn secondary" @click="loadSettled" aria-label="완료 내역 새로고침">완료 내역 새로고침</button>
+            </div>
+          </div>
 
+          <EmptyState v-if="!settled?.length" text="완료된 정산서가 없습니다. (호텔을 선택하면 조회됩니다.)" />
+          <div v-else class="table-wrap">
+            <table class="table" aria-label="완료된 정산서">
+              <thead>
+                <tr>
+                  <th class="hide-md">ID</th>
+                  <th>기간</th>
+                  <th class="tr">지급금액</th>
+                  <th class="hide-sm">계좌</th>
+                  <th>확정시각</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="s in settled" :key="s.id">
+                  <td class="hide-md" data-label="ID">#{{ s.id }}</td>
+                  <td data-label="기간">{{ s.periodStart }} ~ {{ s.periodEnd }}</td>
+                  <td class="tr strong" data-label="지급금액">{{ won(s.payableAmount) }}</td>
+                  <td class="hide-sm" data-label="계좌">{{ s.payoutBankCode }} / {{ s.payoutAccountNo }}</td>
+                  <td data-label="확정시각">{{ dt(s.settledAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
       </div>
     </section>
 
@@ -283,7 +275,6 @@ const tab = ref('summary')
 const hotelId    = ref(null)
 const hotelName  = ref('')
 const hotelSuggests = ref([])
-const hotelMap = ref({})
 const roomTypeId = ref(null) // 필드는 지웠지만 값은 API 필터 호환 위해 유지
 
 /** 주간 범위 */
@@ -358,7 +349,7 @@ async function onHotelNameInput(){
   if(!keyword){ hotelSuggests.value=[]; return }
   suggestTimer = setTimeout(async ()=>{
     try{
-      const list = await api('/api/hotels/search?'+qs({ q: keyword }))
+      const list = await api('/api/hotels/search?'+qs({name:keyword}))
       hotelSuggests.value = Array.isArray(list) ? list.slice(0,10) : []
     }catch{ hotelSuggests.value=[] }
   }, 220)
@@ -427,20 +418,14 @@ async function loadStatements(){
 }
 async function loadSettled(){
   if(!start.value || !end.value){ settled.value=[]; return }
-
-  const query = {
+  if(!hotelId.value){ settled.value=[]; return }
+  const url = `/api/settlements/statements/settled?` + qs({
+    hotelId: hotelId.value,
     start:   start.value,
-    end:     end.value,
-    status:  'SETTLED'
-  }
-  if(hotelId.value){      // 호텔이 선택된 경우만 hotelId 추가
-    query.hotelId = hotelId.value
-  }
-
-  const url = `/api/settlements/statements?` + qs(query)
+    end:     end.value
+  })
   settled.value = await api(url, {}, 'settled') ?? []
 }
-
 
 const canGenerate = computed(() =>
   !!(hotelId.value && start.value && end.value && bankCode.value && accountNo.value && holderName.value)
@@ -526,8 +511,7 @@ async function refreshKpi(){
   const T = totals(thisList), L = totals(lastList)
   const spark = thisList.map(x => x.netSum || 0).slice(0, 12)
 
-const funnel = {
-  created: (statements.value?.length || 0),
+ const funnel = {
   settled: (settled.value?.length || 0)
 }
 
@@ -599,18 +583,7 @@ watch(hotelId, () => {
   if(tab.value === 'settled')    loadSettled()
 })
 
-onMounted(async () => {
-  // 전체 호텔 불러오기 → hotelMap에 저장
- try {
-  const page = await api('/api/hotels/search?size=9999')  // 페이지 크게
-  const list = page?.content ?? []
-  hotelMap.value = Object.fromEntries(list.map(h => [h.id, h.name]))
-} catch (e) { console.error(e) }
- 
-
-  await queryAll()
-})
-/*onMounted(async () => { await queryAll() })*/
+onMounted(async () => { await queryAll() })
 
 /* 요약(호텔별) 행 클릭: 즉시 조회 */
 async function onSummaryRowClick(s){
