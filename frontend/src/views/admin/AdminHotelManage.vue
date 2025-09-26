@@ -298,4 +298,9 @@ th{ color:#475569; font-weight:800; background:#fbfdff }
   width:100%; height:40px; border:1px solid var(--line); border-radius:10px; padding:0 12px;
 }
 .modal-actions{ display:flex; justify-content:flex-end; gap:8px }
+.modal[open]{ animation: pop .14s ease-out }
+@keyframes pop{
+  from{ transform: scale(.98); opacity: 0 }
+  to  { transform: scale(1);    opacity: 1 }
+}
 </style>

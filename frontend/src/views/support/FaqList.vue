@@ -55,7 +55,7 @@ import api from '@/api/auth'
 const categories = [
   { label: '전체',        value: 'ALL' },
   { label: '숙소',        value: '숙소' },
-  { label: '쿠폰/포인트/코인', value: '쿠폰' },
+  { label: '쿠폰/포인트/코인', value: '쿠폰/포인트/코인' },
   { label: '결제/영수증',  value: '결제/영수증' },
   { label: '회원',        value: '회원' },
 ]

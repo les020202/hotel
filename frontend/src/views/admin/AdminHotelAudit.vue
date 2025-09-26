@@ -1,3 +1,4 @@
+<!-- src/views/admin/HotelAppReviewList.vue -->
 <template>
   <section class="wrap">
     <!-- 헤더 -->
@@ -7,6 +8,17 @@
         <p>실시간 검색/필터 · 관리자 전용</p>
       </div>
       <AdminHotelTabs />
+    </div>
+
+    <!-- 알림 배너 -->
+    <div
+      v-if="banner"
+      class="mb-3 p-3 rounded-lg text-sm"
+      :class="banner.type==='error'
+        ? 'bg-rose-50 text-rose-800 ring-1 ring-rose-200'
+        : 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'"
+    >
+      {{ banner.text }}
     </div>
 
     <!-- 검색/필터 바 -->
@@ -23,8 +35,6 @@
           <select v-model="status">
             <option value="">전체</option>
             <option value="PENDING">대기</option>
-            <option value="UNDER_REVIEW">검토중</option>
-            <option value="NEEDS_INFO">보완요청</option>
             <option value="APPROVED">승인</option>
             <option value="REJECTED">반려</option>
           </select>
@@ -39,30 +49,55 @@
         <thead>
           <tr>
             <th style="width:86px">#신청</th>
-            <th>숙소명</th>
+            <th style="width:120px">썸네일</th>
+            <th>숙소명 / 주소</th>
             <th>소유자</th>
             <th>연락처</th>
             <th>신청일</th>
-            <th style="width:220px">상태/액션</th>
+            <th style="width:240px">상태/액션</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="it in rows" :key="it.id">
             <td>#{{ it.id }}</td>
+
+            <td>
+              <img :src="thumb(it)" class="thumb" alt="" />
+            </td>
+
             <td class="b">
               <button class="link" @click="openDetail(it.id)">{{ it.hotelName }}</button>
+              <div class="sub">{{ it.address1 }} <template v-if="it.address2">, {{ it.address2 }}</template></div>
+              <div v-if="it.approvedHotelId" class="ok">승인됨 · hotelId={{ it.approvedHotelId }}</div>
+              <div v-if="it.status==='REJECTED' && it.reviewMemo" class="rej">
+                반려 사유: {{ it.reviewMemo }}
+              </div>
             </td>
+
             <td>{{ it.ownerName }}</td>
             <td>{{ it.phone }}</td>
             <td>{{ fmt(it.createdAt) }}</td>
+
             <td>
-              <span class="badge" :data-variant="it.status">{{ it.status }}</span>
-              <button class="btn xs" @click="approve(it.id)" :disabled="it.status==='APPROVED'">승인</button>
-              <button class="btn xs danger" @click="openReject(it.id)" :disabled="it.status==='REJECTED'">반려</button>
+              <span class="badge" :data-variant="it.status">{{ label(it.status) }}</span>
+
+              <button
+                class="btn xs"
+                @click="approve(it)"
+                :disabled="it.status==='APPROVED' || loadingId===it.id"
+                :aria-busy="loadingId===it.id"
+              >{{ loadingId===it.id ? '승인 중…' : '승인' }}</button>
+
+              <button
+                class="btn xs danger"
+                @click="openReject(it)"
+                :disabled="it.status==='REJECTED'"
+              >반려</button>
             </td>
           </tr>
+
           <tr v-if="!loading && rows.length===0">
-            <td colspan="6" class="empty">표시할 신청이 없습니다.</td>
+            <td colspan="7" class="empty">표시할 신청이 없습니다.</td>
           </tr>
         </tbody>
       </table>
@@ -72,26 +107,27 @@
     <!-- 상세 모달 -->
     <dialog ref="detailDlg" class="modal">
       <div class="modal-body" v-if="detail">
-        <h3>#{{ detail.id }} - {{ detail.hotelName }}</h3>
+        <div class="flex gap-4 items-start">
+          <img :src="thumb(detail)" class="h-28 w-40 object-cover rounded-lg ring-1 ring-black/5" />
+          <div>
+            <h3>#{{ detail.id }} - {{ detail.hotelName }}</h3>
+            <div class="sub">{{ detail.address1 }} <template v-if="detail.address2">, {{ detail.address2 }}</template></div>
+          </div>
+        </div>
+
         <ul class="dl">
           <li><b>소유자</b><span>{{ detail.ownerName }}</span></li>
           <li><b>사업자번호</b><span>{{ detail.businessNo }}</span></li>
           <li><b>연락처</b><span>{{ detail.phone }}</span></li>
           <li><b>성급</b><span>{{ detail.gradeLevel }}성급</span></li>
-          <li><b>주소</b>
-            <span>
-              {{ detail.address1 }}
-              <template v-if="detail.address2"> {{ detail.address2 }}</template>
-              <template v-if="detail.postcode"> ({{ detail.postcode }})</template>
-            </span>
-          </li>
           <li><b>어메니티</b><span>{{ detail.amenitiesCsv || '-' }}</span></li>
           <li><b>코멘트</b><span>{{ detail.comment || '-' }}</span></li>
-          <li><b>상태</b><span>{{ detail.status }}</span></li>
+          <li><b>상태</b><span>{{ label(detail.status) }}</span></li>
           <li><b>신청일</b><span>{{ fmt(detail.createdAt) }}</span></li>
+          <li v-if="detail.reviewMemo"><b>반려 사유</b><span class="rej">{{ detail.reviewMemo }}</span></li>
         </ul>
 
-        <!-- rooms_json 가공 표시(있을 때) -->
+        <!-- rooms_json 표시 -->
         <div v-if="rooms.length" class="rooms">
           <h4>객실 타입</h4>
           <table class="table">
@@ -128,7 +164,7 @@
     <dialog ref="rejectDlg" class="modal">
       <div class="modal-body">
         <h3>반려 사유 입력</h3>
-        <textarea v-model.trim="rejectReason" class="textarea" rows="4" placeholder="사유를 입력하세요"></textarea>
+        <textarea v-model.trim="rejectMemo" class="textarea" rows="4" placeholder="사유를 입력하세요"></textarea>
         <div class="btns">
           <button class="btn danger" @click="doReject">반려</button>
           <button class="btn" @click="rejectDlg.close()">취소</button>
@@ -138,97 +174,117 @@
   </section>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import AdminHotelTabs from './AdminHotelTabs.vue'
-import api from '@/api/auth' // 토큰/리프레시/베이스URL 포함 axios 인스턴스
+import api from '@/api/auth'
 
-// 필터
+type Banner = { type:'success'|'error'; text:string }
+const banner = ref<Banner|null>(null)
+
 const status = ref('PENDING')
 const q = ref('')
 
-// 목록 상태
-const rows = ref([])
+const rows = ref<any[]>([])
 const loading = ref(false)
+const loadingId = ref<number|null>(null)
 
-// 모달/상세
-const detailDlg = ref(null)
-const rejectDlg = ref(null)
-const detail = ref(null)
-const currentId = ref(null)
-const rejectReason = ref('')
+const detailDlg = ref<HTMLDialogElement|null>(null)
+const rejectDlg = ref<HTMLDialogElement|null>(null)
+const detail = ref<any|null>(null)
+const current = ref<any|null>(null)
+const rejectMemo = ref('')
 
-// rooms_json 파싱 (상세 뷰)
+// 로그인된 관리자 아이디(백엔드에서 헤더/세션으로 사용한다면 제거)
+const adminId = 1
+
+function fmt(iso?:string){ return iso?.replace('T',' ').slice(0,19) || '' }
+function label(s:string){
+  return s==='PENDING'?'대기'
+    : s==='UNDER_REVIEW'?'검토중'
+    : s==='NEEDS_INFO'?'보완요청'
+    : s==='APPROVED'?'승인'
+    : s==='REJECTED'?'반려' : s
+}
+
+function thumb(it:any){
+  // 신청서 확장 컬럼을 사용 (없으면 placeholder)
+  if (it.coverImageType==='UPLOADED' && it.coverImageUrl) return it.coverImageUrl
+  if (it.coverImageType==='TEMPLATE' && it.coverImageTemplate) return `/assets/hotel-covers/${it.coverImageTemplate}.jpg`
+  return '/assets/hotel-covers/placeholder.jpg'
+}
+
 const rooms = computed(() => {
   const raw = detail.value?.roomsJson
   if (!raw) return []
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    // 백엔드에서 그대로 저장한 {typeCode,roomCount,...} 배열을 기대
-    return Array.isArray(parsed) ? parsed : []
-  } catch (_) {
-    return []
-  }
+  try{
+    const arr = typeof raw==='string' ? JSON.parse(raw) : raw
+    return Array.isArray(arr) ? arr : []
+  }catch{ return [] }
 })
 
-function fmt(iso){ return iso?.replace('T',' ').slice(0,19) || '' }
-
-// 목록 조회
 async function load(){
   loading.value = true
   try{
-    const params = {
-      page: 0, size: 20,
-      ...(status.value ? { status: status.value } : {}),
-      ...(q.value ? { q: q.value } : {})
-    }
-    // 기대: GET /api/admin/hotelapp?status=&q=&page=&size=
-    const data = await api.get('/admin/hotelapp', { params }).then(r => r.data)
-    rows.value = data?.content || data?.items || data || []
-  } finally {
+    const params:any = { page:0, size:20 }
+    if (status.value) params.status = status.value
+    if (q.value) params.q = q.value
+    // GET /admin/hotelapp?status=&q=
+    const res = await api.get('/admin/hotelapp', { params })
+    rows.value = res.data?.content || res.data?.items || res.data || []
+  }catch(e:any){
+    banner.value = { type:'error', text: e?.response?.data?.message || e.message || '조회 실패' }
+  }finally{
     loading.value = false
   }
 }
 
-// 상세 열기
-async function openDetail(id){
-  // 기대: GET /api/admin/hotelapp/{id}
-  const data = await api.get(`/admin/hotelapp/${id}`).then(r => r.data)
-  detail.value = data
-  detailDlg.value?.showModal()
-}
-
-// 승인
-async function approve(id){
-  if (!confirm('승인하시겠어요?')) return
-  // 기대: POST /api/admin/hotelapp/{id}/approve  body: { note?:string }
-  const res = await api.post(`/admin/hotelapp/${id}/approve`, { note: '' })
-  if (res.status >= 200 && res.status < 300){
-    await load()
-    alert('승인되었습니다.')
-  } else {
-    alert('승인 실패')
+async function openDetail(id:number){
+  try{
+    const { data } = await api.get(`/admin/hotelapp/${id}`)
+    detail.value = data
+    detailDlg.value?.showModal()
+  }catch(e:any){
+    banner.value = { type:'error', text: e?.response?.data?.message || e.message || '상세 조회 실패' }
   }
 }
 
-// 반려
-function openReject(id){
-  currentId.value = id
-  rejectReason.value = ''
+async function approve(it:any){
+  if (!confirm('승인하시겠어요?')) return
+  try{
+    loadingId.value = it.id
+    // POST /admin/hotelapp/{id}/approve  → { hotelId:number }
+    const { data } = await api.post(`/admin/hotelapp/${it.id}/approve`, null, {
+      headers: { 'X-Admin-Id': String(adminId) }
+    })
+    // 테이블 반영
+    it.status = 'APPROVED'
+    it.approvedHotelId = data?.hotelId
+    banner.value = { type:'success', text:`승인 완료 (hotelId=${data?.hotelId})` }
+  }catch(e:any){
+    banner.value = { type:'error', text: e?.response?.data?.message || e.message || '승인 실패' }
+  }finally{
+    loadingId.value = null
+  }
+}
+
+function openReject(it:any){
+  current.value = it
+  rejectMemo.value = ''
   rejectDlg.value?.showModal()
 }
 async function doReject(){
-  if (!rejectReason.value) return alert('사유를 입력하세요.')
-  // 기대: POST /api/admin/hotelapp/{id}/reject  body: { reason:string, note?:string }
-  const res = await api.post(`/admin/hotelapp/${currentId.value}/reject`, {
-    reason: rejectReason.value, note: ''
-  })
-  if (res.status >= 200 && res.status < 300){
+  if (!rejectMemo.value) return alert('사유를 입력하세요.')
+  try{
+    // POST /admin/hotelapp/{id}/reject  body { memo }
+    await api.post(`/admin/hotelapp/${current.value.id}/reject`, { memo: rejectMemo.value })
+    current.value.status = 'REJECTED'
+    current.value.reviewMemo = rejectMemo.value
+    banner.value = { type:'success', text:'반려 처리했습니다.' }
+  }catch(e:any){
+    banner.value = { type:'error', text: e?.response?.data?.message || e.message || '반려 실패' }
+  }finally{
     rejectDlg.value?.close()
-    await load()
-    alert('반려되었습니다.')
-  } else {
-    alert('반려 실패')
   }
 }
 
@@ -267,10 +323,14 @@ onMounted(load)
 th,td{ padding:12px 12px; border-bottom:1px solid #f1f4fb; text-align:left; font-size:14px }
 th{ color:#475569; font-weight:800; background:#fbfdff }
 .b{ font-weight:700 }
+.sub{ color:#6b7280; font-size:12px; margin-top:2px }
+.ok{ color:#059669; font-size:12px; margin-top:2px }
+.rej{ color:#b91c1c; font-size:12px; margin-top:2px }
 .ellipsis{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:520px }
 .empty{ text-align:center; color:#94a3b8; padding:18px 0 }
 .loading{ padding:14px; text-align:center }
 .num{ text-align:right }
+.thumb{ width:110px; height:70px; object-fit:cover; border-radius:8px; box-shadow:0 1px 0 rgba(0,0,0,.04) }
 
 /* 상태 뱃지 */
 .badge{
@@ -286,6 +346,7 @@ th{ color:#475569; font-weight:800; background:#fbfdff }
 /* 버튼 & 모달 */
 .btn{ height:30px; padding:0 10px; border-radius:10px; border:1px solid #cfe0ff;
   background:#f5f9ff; font-weight:700; cursor:pointer; margin-right:6px }
+.btn[aria-busy="true"]{ opacity:.6; pointer-events:none }
 .btn:hover{ background:#eaf3ff }
 .btn.xs{ height:28px; font-size:12px }
 .btn.danger{ background:#fff5f5; border-color:#fecaca }
@@ -300,7 +361,36 @@ th{ color:#475569; font-weight:800; background:#fbfdff }
 .textarea{ width:100%; border:1px solid var(--line); border-radius:10px; padding:8px; resize:vertical }
 .btns{ display:flex; gap:8px; justify-content:flex-end; margin-top:12px }
 
-/* rooms 표 */
 .rooms{ margin-top:16px }
 .rooms h4{ margin:8px 0 10px; font-weight:800 }
+
+/* 모달을 화면 정중앙에 고정 */
+.modal{
+  position: fixed;        /* ← 중요 */
+  inset: 0;               /* top/right/bottom/left: 0 */
+  margin: auto;           /* 가로/세로 중앙 정렬 */
+  max-width: 980px;
+  width: 92%;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,.18);
+}
+
+/* 백드롭(뒷배경) */
+.modal::backdrop{
+  background: rgba(0,0,0,.35);
+  -webkit-backdrop-filter: saturate(120%) blur(2px);
+  backdrop-filter: saturate(120%) blur(2px);
+}
+
+/* 내용 패딩은 기존대로 */
+.modal-body{ padding:18px }
+
+.modal[open]{ animation: pop .14s ease-out }
+@keyframes pop{
+  from{ transform: scale(.98); opacity: 0 }
+  to  { transform: scale(1);    opacity: 1 }
+}
 </style>

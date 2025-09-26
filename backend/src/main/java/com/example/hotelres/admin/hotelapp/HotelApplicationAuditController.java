@@ -1,52 +1,56 @@
-// com.example.hotelres.admin.hotelapp.HotelApplicationAuditController
+// src/main/java/com/example/hotelres/admin/hotelapp/HotelApplicationAuditController.java
 package com.example.hotelres.admin.hotelapp;
 
-import com.example.hotelres.hotelapp.HotelApplicationEntity;
-import com.example.hotelres.security.CustomUserDetails;
-import jakarta.validation.constraints.NotBlank;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/hotelapp")
-@RequiredArgsConstructor
 public class HotelApplicationAuditController {
 
-  private final HotelApplicationAuditService svc;
+    private final HotelApplicationAuditService svc;
 
-  @GetMapping
-  public Page<HotelApplicationEntity> list(
-      @RequestParam(required = false) String status,
-      @RequestParam(required = false) String q,
-      @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "20") int size) {
-    return svc.list(status, q, page, size);
-  }
+    public HotelApplicationAuditController(HotelApplicationAuditService svc) {
+        this.svc = svc;
+    }
 
-  @GetMapping("/{id}")
-  public ResponseEntity<HotelApplicationEntity> get(@PathVariable Long id) {
-    var data = svc.get(id);
-    return data == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(data);
-  }
+    /** 목록 (간단 버전) ?status=&q= */
+    @GetMapping
+    public List<HotelApplicationAuditService.HotelAppRow> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q
+    ) {
+        return svc.search(status, q);
+    }
 
-  @PostMapping("/{id}/approve")
-  public ResponseEntity<Void> approve(
-      @PathVariable Long id,
-      @AuthenticationPrincipal CustomUserDetails admin) {
-    svc.approve(id, admin);
-    return ResponseEntity.ok().build();
-  }
+    /** 상세 */
+    @GetMapping("/{id}")
+    public HotelApplicationAuditService.HotelAppRow get(@PathVariable long id) {
+        return svc.getOne(id);
+    }
 
-  public record RejectReq(@NotBlank String reason, String note) {}
-  @PostMapping("/{id}/reject")
-  public ResponseEntity<Void> reject(
-      @PathVariable Long id,
-      @RequestBody RejectReq req,
-      @AuthenticationPrincipal CustomUserDetails admin) {
-    svc.reject(id, req.reason(), admin);
-    return ResponseEntity.ok().build();
-  }
+    /** 승인 → 프로시저 호출 → 생성/연결된 hotelId 반환 */
+    @PostMapping("/{id}/approve")
+    public ResponseEntity<HotelApplicationAuditService.ApproveResponse> approve(
+            @PathVariable long id,
+            @RequestHeader(value = "X-Admin-Id", required = false) Long adminId // 프론트에서 넣어줌
+    ) {
+        long aid = adminId != null ? adminId : 0L;
+        long hotelId = svc.approve(id, aid);
+        return ResponseEntity.ok(new HotelApplicationAuditService.ApproveResponse(hotelId));
+    }
+
+    /** 반려(사유 저장) */
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<Void> reject(
+            @PathVariable long id,
+            @RequestBody HotelApplicationAuditService.RejectRequest body,
+            @RequestHeader(value = "X-Admin-Id", required = false) Long adminId
+    ) {
+        long aid = adminId != null ? adminId : 0L;
+        svc.reject(id, aid, body.memo());
+        return ResponseEntity.ok().build();
+    }
 }
