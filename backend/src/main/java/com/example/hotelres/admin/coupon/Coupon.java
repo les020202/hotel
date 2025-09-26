@@ -46,4 +46,6 @@ public class Coupon {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt; // 생성 시각 (DB 자동 기록)
+
+    public boolean isStackable() { return stackable; }
 }

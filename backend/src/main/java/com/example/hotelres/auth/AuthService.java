@@ -7,11 +7,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.hotelres.user.coupon.UserCouponService;
 
 @Service @RequiredArgsConstructor
 public class AuthService {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final UserCouponService userCouponService;
 
     @Transactional
     public User signup(SignupRequest req) {
@@ -28,6 +30,13 @@ public class AuthService {
 
         u.setGender(req.getGender());
         u.setBirthDate(req.getBirthDate());
+
+        // ✅ 신규가입 쿠폰 자동 지급
+        try {
+            userCouponService.grantWelcomeCouponIfNeeded(u.getId());
+            return users.save(u);
+        } catch (Exception ignore) { }
+
         return users.save(u);
     }
 
