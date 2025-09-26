@@ -109,6 +109,8 @@ public class UserCouponService {
         ci.setCoupon(coupon);
         ci.setUserId(userId);
         ci.setStatus(CouponIssuanceStatus.AVAILABLE);
+
+        ci.setIssuedAt(java.time.LocalDateTime.now());
         if (welcomeExpDays > 0) {
             ci.setExpiresAt(LocalDateTime.now().plusDays(welcomeExpDays));
         }
