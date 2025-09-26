@@ -154,11 +154,12 @@ function toastOnce(msg:string){ toast.value=msg; setTimeout(()=>toast.value='',1
 
 <style scoped>
 /* === 쿠폰/프로모션 페이지와 1:1 동일 규격 === */
-.wrap{
-  padding:20px 22px 40px;
-  color:#0f172a;
-  font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-  min-width: 0;
+.wrap {
+  flex: 1;
+  width: 100%;
+  min-width: 0;          /* ★ flex 컨테이너 안에서 줄어들 수 있게 */
+  padding: 20px 22px 40px;
+  box-sizing: border-box;
 }
 
 /* 상단바 */
@@ -244,4 +245,5 @@ function toastOnce(msg:string){ toast.value=msg; setTimeout(()=>toast.value='',1
   color:#0f172a; background:#fff; border:1px solid #e7edf7; box-shadow:0 10px 26px rgba(15,23,42,.18);
   font-weight:700; z-index:60;
 }
+
 </style>

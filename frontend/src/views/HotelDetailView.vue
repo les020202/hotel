@@ -121,6 +121,13 @@
       </template>
       <p v-else class="text-gray-500">등록된 편의시설이 없습니다.</p>
     </section>
+    <!-- 리뷰 섹션 -->
+<section class="mt-8">
+  <ReviewSection :hotel-id="Number(route.params.id)" 
+  @rating-updated="onRatingUpdated"
+  />
+</section>
+
 
     <!-- 객실(오퍼) 리스트 -->
     <section>
@@ -158,21 +165,8 @@
               </div>
 
               <div class="mt-auto pt-4 flex items-center justify-end gap-3">
-                <!-- 객실별 하트(로컬 전용) -->
-                <button
-                  class="border rounded-xl w-11 h-11 grid place-items-center"
-                  :title="isRoomWished(t.roomTypeId) ? '찜 해제' : '찜하기'"
-                  @click="toggleRoomWish(t.roomTypeId)"
-                >
-                  <svg v-if="isRoomWished(t.roomTypeId)" viewBox="0 0 24 24" class="w-6 h-6 fill-rose-500">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6.5 3.5 5 5.5 5c1.7 0 3.25 1.03 3.97 2.57h1.06C11.25 6.03 12.8 5 14.5 5 16.5 5 18 6.5 18 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" class="w-6 h-6 stroke-gray-700 fill-none">
-                    <path stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"
-                          d="M12.1 20.3C7.14 15.78 4 12.94 4 9.5 4 7.5 5.5 6 7.5 6c1.54 0 3.04.99 3.57 2.36h1.87C13.46 6.99 14.96 6 16.5 6 18.5 6 20 7.5 20 9.5c0 3.44-3.14 6.28-8.1 10.8z"/>
-                  </svg>
-                </button>
-
+                
+                <!-- ✅ 예약하기: 클릭 시 goReservation(t) 호출 -->
                 <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl" @click="goReservation(t)">예약하기</button>
               </div>
             </div>
@@ -181,8 +175,7 @@
       </ul>
     </section>
 
-    <!-- 지도 -->
-    <section class="mt-2" v-show="canShowMap">
+     <section class="mt-2" v-show="canShowMap">
       <h2 class="text-xl font-bold mb-3">위치</h2>
       <div class="relative">
         <div ref="mapEl" class="w-full h-72 md:h-96 rounded-xl overflow-hidden bg-neutral-100"></div>
@@ -195,6 +188,7 @@
 
     <hr class="border-gray-200 mt-8" />
   </div>
+
 </template>
 
 <script setup>
@@ -204,6 +198,9 @@ import SearchBar from '@/components/SearchBar.vue'
 import { getHotelDetail } from '@/api/hotelApi'
 import { createReservationHold } from '@/api/reservation'
 import { getMe } from '@/api/auth'
+import ReviewSection from '@/components/review/ReviewSection.vue'
+
+
 
 // ✅ 위시리스트 연동
 import { isWished as isWishedHotel, toggleWishlist, syncCurrentHotel } from '@/api/wishlistApi'
@@ -546,6 +543,11 @@ async function goReservation(roomType) {
   } catch (e) {
     console.error(e)
   }
+}
+function onRatingUpdated(newRounded) {
+  // 서버에서 hotels.rating도 이미 업데이트됨.
+  // 화면 표시만 바로 바꿔 주면 즉시 반영됨.
+  if (hotel.value) hotel.value.rating = newRounded
 }
 </script>
 

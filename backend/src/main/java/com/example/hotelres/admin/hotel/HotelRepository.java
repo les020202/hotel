@@ -1,5 +1,7 @@
 package com.example.hotelres.admin.hotel;
 
+import java.util.List;
+
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -20,4 +22,7 @@ public interface HotelRepository extends JpaRepository<Hotel, Long> {
     Page<Hotel> search(@Param("region") String region,
                        @Param("q") String q,
                        Pageable pageable);
+    
+    @Query("select h.id from Hotel h")
+    List<Long> findAllHotelIds();
 }

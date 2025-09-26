@@ -20,8 +20,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MyBookingsController {
 
-    private final MyBookingQueryRepository queryRepo; // ✅ 네이티브/프로젝션 레포 그대로 사용
-    private final UserRepository userRepository;      // ✅ loginId → userId 변환용
+    private final MyBookingQueryRepository queryRepo; // 네이티브/프로젝션 레포
+    private final UserRepository userRepository;      // loginId → userId
 
     private Long requireUserId(String loginId) {
         return userRepository.findIdByLoginId(loginId)
@@ -30,7 +30,6 @@ public class MyBookingsController {
 
     @GetMapping
     public Page<MyBookingSummary> list(
-            // ✅ 기본 UserDetails라 id가 없으니 username(loginId)로 받는다
             @AuthenticationPrincipal(expression = "username") String loginId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
@@ -60,11 +59,8 @@ public class MyBookingsController {
 
     // ─────────────────────────────────────────────────────────
     // 프로젝션 → DTO 매핑
-    // ※ MyBookingQueryRepository.MyBookingRow의 checkIn/checkOut 타입이
-    //    LocalDate면 그대로, String이면 아래 helper로 변환해서 쓰세요.
     // ─────────────────────────────────────────────────────────
     private MyBookingSummary toDto(MyBookingQueryRepository.MyBookingRow r) {
-        // 만약 프로젝션이 LocalDate라면 아래 두 줄을 그냥 r.getCheckIn(), r.getCheckOut()으로 사용
         LocalDate in  = toLocalDate(r.getCheckIn());
         LocalDate out = toLocalDate(r.getCheckOut());
 
@@ -79,7 +75,11 @@ public class MyBookingsController {
                 r.getGuests(),
                 r.getTotalAmount(),
                 r.getCurrency(),
-                r.getReceiptUrl()
+                r.getReceiptUrl(),
+                // ▼ 취소 메타 (레포에서 DATE_FORMAT으로 String으로 내려오게 해둠)
+                r.getCanceledAt(),
+                r.getCanceledBy(),
+                r.getCancelReason()
         );
     }
 
