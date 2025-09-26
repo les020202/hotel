@@ -3,16 +3,18 @@ package com.example.hotelres.main.service;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
-import java.util.*;
+import java.util.*; 
+import java.util.concurrent.ThreadLocalRandom; 
 
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
 import com.example.hotelres.main.entity.BookingDayEntity.Status;
-import com.example.hotelres.main.model.Hotel; // ✅ DTO만 import
+import com.example.hotelres.main.model.Hotel;
 import com.example.hotelres.main.repo.BookingDayQueryRepository;
 import com.example.hotelres.main.repo.HotelJpaRepository;
 import com.example.hotelres.main.repo.HotelSpecifications;
+
 
 @Service
 @RequiredArgsConstructor
@@ -31,11 +33,7 @@ public class HotelQueryService {
             Pageable pageable
     ) {
         var spec = HotelSpecifications.filter(q, region, regionExact, gradeMin, hasHomepage);
-
-        // 엔티티 Page (풀 패키지로 명시)
         Page<com.example.hotelres.admin.hotel.Hotel> page = repo.findAll(spec, pageable);
-
-        // DTO 변환
         return page.map(this::toModel);
     }
 
@@ -67,10 +65,7 @@ public class HotelQueryService {
                 .build();
     }
 
-    /** BigDecimal → Double 변환 */
-    private Double toDouble(Number n) {
-        return n == null ? null : n.doubleValue();
-    }
+    private Double toDouble(Number n) { return n == null ? null : n.doubleValue(); }
 
     /** 호텔별 최소 가격 조회 */
     public Map<Long, Integer> getMinPricesByHotelIds(List<Long> ids) {
@@ -79,41 +74,118 @@ public class HotelQueryService {
 
         Map<Long,Integer> out = new HashMap<>();
         for (Object[] r : rows) {
-            Long hotelId  = ((Number) r[0]).longValue();   // ✅ 안전 캐스팅
-            Integer price = ((Number) r[1]).intValue();    // ✅ BigDecimal/Long 등 커버
+            Long hotelId  = ((Number) r[0]).longValue();
+            Integer price = ((Number) r[1]).intValue();
             out.put(hotelId, price);
         }
         return out;
     }
 
-    /** 추천 호텔 목록(id/minPrice) */
+    // -------------------- 여기부터 추천 수정분 --------------------
+
+    /** 추천 호텔 목록(id/minPrice) - 중복 제거 + 매요청 랜덤 셔플 */
     public List<Map<String,Object>> getRecommended(int limit) {
         var rows = bookingDayQueryRepository.findCheapestHotelIds(LocalDate.now(), Status.OPEN);
-        List<Map<String,Object>> resp = new ArrayList<>();
-        for (int i=0; i<rows.size() && i<limit; i++) {
-            Object[] r = rows.get(i);
+
+        List<Map<String,Object>> all = new ArrayList<>(rows.size());
+        for (Object[] r : rows) {
             Map<String,Object> m = new LinkedHashMap<>();
-            m.put("hotelId", ((Number) r[0]).longValue()); // ✅ 안전 캐스팅
-            m.put("minPrice", ((Number) r[1]).intValue()); // ✅ 안전 캐스팅
-            resp.add(m);
+            m.put("hotelId", ((Number) r[0]).longValue());
+            m.put("minPrice", ((Number) r[1]).intValue());
+            all.add(m);
         }
-        return resp;
+
+        List<Map<String,Object>> uniq = dedupe(all, m -> m.get("hotelId"));
+
+        // ✅ 매요청 랜덤 셔플 (새로고침마다 순서 변함)
+        shuffleEachRequest(uniq);
+
+        int end = Math.min(limit, uniq.size());
+        return uniq.subList(0, end);
     }
-    
-    /** ⬇️ 추가: 추천 카드(id, name, address, coverImageUrl, minPrice) */
+
+    /** 추천 카드(id, name, address, coverImageUrl, minPrice) - 매요청 랜덤 셔플 */
     public List<Map<String,Object>> getRecommendedCards(int limit) {
         var rows = bookingDayQueryRepository.findRecommendedHotelCardRows(LocalDate.now(), Status.OPEN);
-        List<Map<String,Object>> resp = new ArrayList<>();
-        for (int i = 0; i < rows.size() && i < limit; i++) {
-            Object[] r = rows.get(i);
+
+        List<Map<String,Object>> all = new ArrayList<>(rows.size());
+        for (Object[] r : rows) {
             Map<String,Object> m = new LinkedHashMap<>();
             m.put("id",            ((Number) r[0]).longValue());
             m.put("name",          (String) r[1]);
             m.put("address",       (String) r[2]);
             m.put("coverImageUrl", (String) r[3]);
             m.put("minPrice",      r[4] == null ? null : ((Number) r[4]).intValue());
-            resp.add(m);
+            all.add(m);
         }
-        return resp;
+
+        List<Map<String,Object>> uniq = dedupe(all, m -> m.get("id"));
+
+        // (선택) 지역 편중 완화는 유지
+        List<Map<String,Object>> diversified = diversifyByArea(uniq, 2);
+        if (diversified.size() < uniq.size()) {
+            Set<Object> kept = new HashSet<>();
+            for (var m : diversified) kept.add(m.get("id"));
+            for (var m : uniq) if (kept.add(m.get("id"))) diversified.add(m);
+        }
+
+        // ✅ 매요청 랜덤 셔플
+        shuffleEachRequest(diversified);
+
+        int end = Math.min(limit, diversified.size());
+        return diversified.subList(0, end);
+    }
+
+// -------------------- 유틸 --------------------
+
+// (기존) dedupe/diversifyByArea 그대로 유지
+
+/** ✅ 매요청마다 랜덤 셔플 */
+private <T> void shuffleEachRequest(List<T> list) {
+    if (list == null || list.size() <= 1) return;
+    Collections.shuffle(list, ThreadLocalRandom.current());
+}
+
+    // -------------------- 유틸 --------------------
+
+    private <T> List<T> dedupe(List<T> src, java.util.function.Function<T, ?> keyFn) {
+        Set<Object> seen = new LinkedHashSet<>();
+        List<T> out = new ArrayList<>(src.size());
+        for (T t : src) {
+            Object k = keyFn.apply(t);
+            if (seen.add(k)) out.add(t);
+        }
+        return out;
+    }
+
+    private long dailySeed() {
+        return LocalDate.now().toEpochDay(); // 필요 시 ZoneId.of("Asia/Seoul") 고려
+    }
+
+    private <T> void shuffleWithSeed(List<T> list, long seed) {
+        if (list.size() <= 1) return;
+        long s = (seed ^ 0x9E3779B97F4A7C15L);
+        for (int i = list.size() - 1; i > 0; i--) {
+            s = (s * 1664525L + 1013904223L) & 0xFFFFFFFFL;
+            int j = (int)(s % (i + 1));
+            Collections.swap(list, i, j);
+        }
+    }
+
+    private List<Map<String, Object>> diversifyByArea(List<Map<String, Object>> src, int maxPerArea) {
+        Map<String, Integer> cap = new HashMap<>();
+        List<Map<String, Object>> out = new ArrayList<>(src.size());
+        for (Map<String, Object> m : src) {
+            String addr = Objects.toString(m.get("address"), "");
+            String area = addr;
+            String[] toks = addr.split("\\s+");
+            if (toks.length >= 2) area = toks[0] + " " + toks[1];
+            int cnt = cap.getOrDefault(area, 0);
+            if (cnt < maxPerArea) {
+                out.add(m);
+                cap.put(area, cnt + 1);
+            }
+        }
+        return out;
     }
 }
