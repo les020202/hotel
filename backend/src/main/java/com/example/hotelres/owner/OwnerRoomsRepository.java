@@ -11,7 +11,7 @@ import java.util.List;
 
 public interface OwnerRoomsRepository extends JpaRepository<RoomEntity, Long> {
 
-    // ✅ 객실 현황: 게스트는 포함하지 않고, 배정여부(occupied-equivalent)만 JPQL로 반환
+    // 객실 현황: 해제되지 않은 배정만 점유로 계산 (a.releasedAt is null)
     @Query("""
       select new com.example.hotelres.owner.dto.RoomStatusDto(
         r.id, r.roomNo, r.floor,
@@ -22,7 +22,9 @@ public interface OwnerRoomsRepository extends JpaRepository<RoomEntity, Long> {
       from RoomEntity r
         join RoomTypeEntity rt on rt.id = r.roomTypeId
         left join RoomNightAssignmentEntity a
-          on a.roomId = r.id and a.stayDate = :date
+          on a.roomId = r.id
+         and a.stayDate = :date
+         and a.releasedAt is null
       where r.hotelId = :hotelId
       order by r.floor asc, r.roomNo asc
     """)
@@ -30,10 +32,7 @@ public interface OwnerRoomsRepository extends JpaRepository<RoomEntity, Long> {
                                    @Param("date") LocalDate date);
 
     // ─────────────────────────────────────────────────────────
-    // ✅ 방 ID별 대표 투숙객(첫 번째) 네이티브 조회
-    //   - room_night_assignments → booking_items → bookings → booking_guests
-    //   - alias 를 camelCase 로 맞춰서 interface 기반 프로젝션에 정확히 매핑
-    //   - 대표 투숙객: booking_guests 의 "첫 행" (id ASC 기준)
+    // 방 ID별 대표 투숙객(첫 번째) 네이티브 조회
     // ─────────────────────────────────────────────────────────
     interface RoomGuestProjection {
         Long   getRoomId();
@@ -44,7 +43,6 @@ public interface OwnerRoomsRepository extends JpaRepository<RoomEntity, Long> {
     @Query(value = """
         SELECT
           r.id AS roomId,
-          /* 대표 투숙객(첫 번째)만 추출 */
           (SELECT g.name
              FROM booking_guests g
             WHERE g.booking_id = b.id
@@ -59,11 +57,12 @@ public interface OwnerRoomsRepository extends JpaRepository<RoomEntity, Long> {
         LEFT JOIN room_night_assignments a
           ON a.room_id   = r.id
          AND a.stay_date = :date
+         AND a.released_at IS NULL
         LEFT JOIN booking_items bi
-          ON bi.id = a.booking_item_id           -- ★ 핵심: booking_item_id로 연결
+          ON bi.id = a.booking_item_id
         LEFT JOIN bookings b
           ON b.id = bi.booking_id
-         AND b.status = 'CONFIRMED'              -- enum이 문자열 저장이면 OK (숫자면 값에 맞게 변경)
+         AND b.status = 'CONFIRMED'
         WHERE r.hotel_id = :hotelId
     """, nativeQuery = true)
     List<RoomGuestProjection> findGuestByRoomOnDate(@Param("hotelId") Long hotelId,

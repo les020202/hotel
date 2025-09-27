@@ -13,6 +13,7 @@ public class RoomNightAssignmentEntity {
     @Column(name="booking_item_id") Long bookingItemId;
     @Column(name="stay_date") LocalDate stayDate;
     @Column(name="assigned_at", insertable=false, updatable=false) LocalDateTime assignedAt;
+    @Column(name="released_at") LocalDateTime releasedAt;
     public RoomNightAssignmentEntity() {}
     public RoomNightAssignmentEntity(Long roomId, Long bookingItemId, LocalDate stayDate){
         this.roomId=roomId; this.bookingItemId=bookingItemId; this.stayDate=stayDate;

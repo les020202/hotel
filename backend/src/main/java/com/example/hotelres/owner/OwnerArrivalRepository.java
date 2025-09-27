@@ -19,6 +19,7 @@ public interface OwnerArrivalRepository extends JpaRepository<BookingEntity, Lon
       case when exists (
         select a.id from RoomNightAssignmentEntity a
         where a.bookingItemId = bi.id
+          and a.releasedAt is null
       ) then true else false end
     )
     from BookingEntity b
