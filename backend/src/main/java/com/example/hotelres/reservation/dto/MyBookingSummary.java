@@ -14,5 +14,7 @@ public record MyBookingSummary(
         Integer guests,
         Integer totalAmount,
         String currency,
-        String receiptUrl
+        String receiptUrl,
+        String guestName,
+        String guestPhone
 ) {}

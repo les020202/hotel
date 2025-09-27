@@ -78,17 +78,22 @@
           </div>
           <div class="value">{{ row.guests }}명</div>
 
+          <!-- ✅ 추가: 대표 투숙객 -->
+          <div class="label">
+            <span class="ico" aria-hidden="true">🧑</span> 대표 투숙객
+          </div>
+          <div class="value">{{ row.guestName || '-' }}</div>
+
+          <div class="label">
+            <span class="ico" aria-hidden="true">📞</span> 연락처
+          </div>
+          <div class="value">{{ row.guestPhone || '-' }}</div>
+
           <div class="label">
             <span class="ico" aria-hidden="true">🏨</span> 호텔 상세
           </div>
           <div class="value">
-            <button
-              class="link-as-btn"
-              type="button"
-              @click="goHotelDetail(row)"
-            >
-              View Place
-            </button>
+            <button class="link-as-btn" type="button" @click="goHotelDetail(row)">View Place</button>
           </div>
         </section>
       </article>
