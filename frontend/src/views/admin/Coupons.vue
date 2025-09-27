@@ -293,11 +293,12 @@ onMounted(load)
 
 <style scoped>
 /* ---------- 레이아웃 & 상단바 ---------- */
-.wrap{
-  padding:20px 22px 40px;
-  color:#0f172a;
-  font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-  min-width: 0;                 /* ★ 사이드바 밀림 방지 */
+.wrap {
+  flex: 1;
+  width: 100%;
+  min-width: 0;          /* ★ flex 컨테이너 안에서 줄어들 수 있게 */
+  padding: 20px 22px 40px;
+  box-sizing: border-box;
 }
 .topbar{
   display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
@@ -418,4 +419,5 @@ onMounted(load)
   color:#0f172a; background:#fff; border:1px solid #e7edf7; box-shadow:0 10px 26px rgba(15,23,42,.18);
   font-weight:700; z-index:60;
 }
+
 </style>

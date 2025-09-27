@@ -6,24 +6,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
-
-import java.sql.Date; // ← 결과를 LocalDate로 변환은 컨트롤러에서 수행
-import java.util.Optional;
+import java.sql.Date; // checkIn / checkOut 매핑용
 
 /**
- * "내 예약 요약" 네이티브 조회용 레포지토리.
- *
- * 필요 테이블:
- *   bookings(id, user_id, hotel_id, check_in, check_out, nights, guests, total_amount, currency, status)
- *   booking_items(id, booking_id, room_type_id, ...)
- *   hotels(id, name, ...)
- *   room_types(id, name, ...)
- *   payments(id, booking_id, status, raw_payload, ...)
- *   booking_guests(id, booking_id, name, phone)
+ * "내 예약" 네이티브 조회용 레포지토리.
+ * - 취소 메타(canceled_at/by/reason) 포함
+ * - 날짜: DATE()로 잘라 java.sql.Date로 매핑
+ * - 상태: CAST(b.status AS CHAR)
  */
 public interface MyBookingQueryRepository extends Repository<BookingEntity, Long> {
 
-    // 목록
+    /* 목록 */
     @Query(value = """
         SELECT
           b.id                               AS bookingId,
@@ -39,7 +32,11 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
           JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl,
           /* ✅ 대표 투숙객 1명(첫 번째) */
           (SELECT g.name  FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestName,
-          (SELECT g.phone FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestPhone
+          (SELECT g.phone FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestPhone,
+          /* 취소 메타 */
+          DATE_FORMAT(b.canceled_at, '%Y-%m-%dT%H:%i:%s') AS canceledAt,
+          b.canceled_by                      AS canceledBy,
+          b.cancel_reason                    AS cancelReason
         FROM bookings b
         JOIN booking_items bi ON bi.booking_id = b.id
         JOIN hotels       h   ON h.id = b.hotel_id
@@ -55,15 +52,14 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
         WHERE b.user_id = :userId
         ORDER BY b.id DESC
         """,
-        countQuery = """
-        SELECT COUNT(*)
-        FROM bookings b
-        WHERE b.user_id = :userId
+            countQuery = """
+        SELECT COUNT(*) FROM bookings b WHERE b.user_id = :userId
+
         """,
         nativeQuery = true)
     Page<MyBookingRow> findMyBookings(@Param("userId") Long userId, Pageable pageable);
 
-    // 단건
+    /* 단건 */
     @Query(value = """
         SELECT
           b.id                               AS bookingId,
@@ -79,7 +75,11 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
           JSON_UNQUOTE(JSON_EXTRACT(p.raw_payload, '$.receipt.url')) AS receiptUrl,
           /* ✅ 대표 투숙객 1명(첫 번째) */
           (SELECT g.name  FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestName,
-          (SELECT g.phone FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestPhone
+          (SELECT g.phone FROM booking_guests g WHERE g.booking_id = b.id ORDER BY g.id ASC LIMIT 1) AS guestPhone,
+          /* 취소 메타 */
+          DATE_FORMAT(b.canceled_at, '%Y-%m-%dT%H:%i:%s') AS canceledAt,
+          b.canceled_by                      AS canceledBy,
+          b.cancel_reason                    AS cancelReason
         FROM bookings b
         JOIN booking_items bi ON bi.booking_id = b.id
         JOIN hotels       h   ON h.id = b.hotel_id
@@ -95,11 +95,13 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
         WHERE b.user_id = :userId
           AND b.id      = :bookingId
         """,
-        nativeQuery = true)
-    Optional<MyBookingRow> findMyBooking(@Param("userId") Long userId,
-                                         @Param("bookingId") Long bookingId);
+            nativeQuery = true)
+    java.util.Optional<MyBookingRow> findMyBooking(@Param("userId") Long userId,
+                                                   @Param("bookingId") Long bookingId);
 
-    /** 네이티브 결과 매핑용 프로젝션(SELECT 별칭과 1:1 매칭) */
+    /**
+     * 네이티브 결과 매핑용 프로젝션 (SELECT 별칭과 1:1)
+     */
     interface MyBookingRow {
         Long    getBookingId();
         String  getStatus();
@@ -116,5 +118,10 @@ public interface MyBookingQueryRepository extends Repository<BookingEntity, Long
         // ✅ 추가: 대표 투숙객 정보
         String  getGuestName();
         String  getGuestPhone();
+
+        // ✅ 추가된 취소 메타
+        String  getCanceledAt();
+        String  getCanceledBy();
+        String  getCancelReason();
     }
 }

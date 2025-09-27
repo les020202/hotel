@@ -9,16 +9,15 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service @RequiredArgsConstructor
+@Service
+@RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
     private final UserRepository users;
 
     @Override
     public UserDetails loadUserByUsername(String loginId) throws UsernameNotFoundException {
-        User u = users.findByLoginId(loginId).orElseThrow(
-                () -> new UsernameNotFoundException("user not found"));
-        return new org.springframework.security.core.userdetails.User(
-                u.getLoginId(), u.getPasswordHash(),
-                List.of(new SimpleGrantedAuthority(u.getRole().name())));
+        User u = users.findByLoginId(loginId)
+            .orElseThrow(() -> new UsernameNotFoundException("user not found"));
+        return new CustomUserDetails(u); // ★ 여기!
     }
 }

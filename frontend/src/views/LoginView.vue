@@ -50,11 +50,14 @@ async function onLogin() {
 
     const role = getRoleFromPayload(parseJwt(token))
     localStorage.setItem('token', token)
-    router.push(role === 'ROLE_ADMIN' ? '/admin' : '/main')
-  } catch (e) {
-    // ⛔️ 인터셉터 & login()에서 서버 JSON을 그대로 던지므로 여기서 바로 구조분해
-    const { error, attempts = 0, locked = false } = e || {}
 
+    const target =
+      role === 'ROLE_ADMIN' ? '/admin' :
+      role === 'ROLE_OWNER' ? '/owner' : '/main'
+
+    await router.push(target)   // ✅ 한 번만 push
+  } catch (e) {
+    const { error, attempts = 0, locked = false } = e || {}
     if (locked) {
       msg.value = '계정이 잠겼습니다. 1시간 후에 다시 시도해주세요.'
     } else if (error === 'INVALID_CREDENTIALS') {
@@ -68,6 +71,7 @@ async function onLogin() {
     loading.value = false
   }
 }
+
 </script>
 
 <template>

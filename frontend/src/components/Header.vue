@@ -110,7 +110,7 @@ function onWishlistClick(){
   router.push('/wishlist')
 }
 function onHotelCreateClick(){
-  alert('호텔 등록은 추후 제공됩니다.')
+  router.push('/hotelapply')   // 호텔 등록(신청) 페이지로 이동
 }
 function go(path){ open.value = false; router.push(path) }
 

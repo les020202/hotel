@@ -16,4 +16,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<Long> findIdByLoginId(@Param("loginId") String loginId);
 
 
+
 }

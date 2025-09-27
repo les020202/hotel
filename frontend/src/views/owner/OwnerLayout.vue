@@ -101,7 +101,13 @@ watch(() => route.params.hotelId, (v) => {
             호실 배정
         </RouterLink>
         <RouterLink :to="`/owner/hotels/${currentHotelId}/rooms`">객실 현황</RouterLink>
-
+<RouterLink
+  :to="currentHotelId ? `/owner/hotels/${currentHotelId}/reviews` : '/owner'"
+  class="block px-3 py-2 rounded hover:bg-gray-100"
+  :class="{'pointer-events-none opacity-50': !currentHotelId, 'bg-gray-200 font-semibold': $route.path.includes('/reviews')}"
+>
+  리뷰 조회
+</RouterLink>
         </nav>
       </div>
     </aside>

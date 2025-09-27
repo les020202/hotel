@@ -36,7 +36,9 @@ public class MyBookingsController {
         Long userId = requireUserId(loginId);
 
         var rows = queryRepo.findMyBookings(userId, PageRequest.of(page, size));
-        var mapped = rows.getContent().stream().map(this::toDto).collect(Collectors.toList());
+        var mapped = rows.getContent().stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
 
         return new PageImpl<>(mapped, rows.getPageable(), rows.getTotalElements());
     }
@@ -55,7 +57,7 @@ public class MyBookingsController {
     }
 
     // ─────────────────────────────────────────────────────────
-    // 프로젝션 → DTO 매핑
+    // 프로젝션 → DTO 매핑 (⚠️ 레코드 생성자 인자 순서 = 레코드 정의 순서!)
     // ─────────────────────────────────────────────────────────
     private MyBookingSummary toDto(MyBookingQueryRepository.MyBookingRow r) {
         LocalDate in  = toLocalDate(r.getCheckIn());
@@ -73,7 +75,13 @@ public class MyBookingsController {
                 r.getTotalAmount(),
                 r.getCurrency(),
                 r.getReceiptUrl(),
-                // ✅ 대표 투숙객
+
+                // ▼ 취소 메타 (레포에서 DATE_FORMAT으로 String으로 내려옴)
+                r.getCanceledAt(),
+                r.getCanceledBy(),
+                r.getCancelReason(),
+
+                // ▼ 대표 투숙객
                 r.getGuestName(),
                 r.getGuestPhone()
         );
@@ -83,6 +91,6 @@ public class MyBookingsController {
         if (v == null) return null;
         if (v instanceof LocalDate ld) return ld;
         if (v instanceof java.sql.Date sd) return sd.toLocalDate();
-        return LocalDate.parse(String.valueOf(v));
+        return LocalDate.parse(String.valueOf(v)); // "YYYY-MM-DD"
     }
 }

@@ -20,6 +20,9 @@ import FindPasswordView from '@/views/FindPasswordView.vue'
 import SearchView from '@/views/SearchView.vue'
 import HotelDetailView from '@/views/HotelDetailView.vue'
 
+//호텔 등록
+import HotelApply from '@/views/HotelApply.vue'
+import HotelApplyMine from '@/views/HotelApplyMine.vue'
 
 // 마이페이지
 import MyPage from '@/views/mypage/MyPage.vue'
@@ -134,6 +137,39 @@ const router = createRouter({
     { path: '/pay/success', component: PaymentSuccess, meta: { public: true } },
     { path: '/pay/fail',    component: PaymentFail,    meta: { public: true } },
 
+// 예약/결제 (콜백은 비로그인 허용)
+{
+  path: '/reservation',
+  // ⚠️ 이 파일만 지연 로딩으로 바꿔 순환 의존 깨기
+  component: () => import('@/views/reservation/ReservationPage.vue'),
+},
+{
+  path: '/reservation/success',
+  name: 'PaySuccess',
+  component: () => import('@/views/reservation/PaymentSuccess.vue'),
+  meta: { public: true },
+},
+
+{ path: '/hotelapply', component: HotelApply, meta: { requiresAuth: true } },
+{ path: '/hotelapply/mine', component: HotelApplyMine, meta:{ requiresAuth:true } },
+{
+  path: '/reservation/fail',
+  name: 'PayFail',
+  component: () => import('@/views/reservation/PaymentFail.vue'),
+  meta: { public: true },
+},
+
+// Toss가 호출하는 짧은 콜백 URL도 받기 (동일 컴포넌트로 연결)
+{
+  path: '/pay/success',
+  component: () => import('@/views/reservation/PaymentSuccess.vue'),
+  meta: { public: true },
+},
+{
+  path: '/pay/fail',
+  component: () => import('@/views/reservation/PaymentFail.vue'),
+  meta: { public: true },
+},
 
     // 관리자 (ROLE_ADMIN)
     {
@@ -178,7 +214,15 @@ const router = createRouter({
     { path: 'hotels/:hotelId/inventory', component: OwnerInventory },
     { path: 'hotels/:hotelId/bookings', component: OwnerBookings },
     { path: 'hotels/:hotelId/assign', component: AssignView },
-    { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') }
+
+    { path: 'hotels/:hotelId/rooms', component: () => import('@/views/owner/HouseStatus.vue') },
+  { 
+  path: 'hotels/:hotelId/reviews',
+  name: 'OwnerReviews',
+  component: () => import('@/views/owner/OwnerReviews.vue'),
+  props: route => ({ hotelId: Number(route.params.hotelId) })
+},
+
   ]
 },
 
