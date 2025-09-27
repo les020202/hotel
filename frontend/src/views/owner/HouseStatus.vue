@@ -7,29 +7,107 @@ const route = useRoute()
 const hotelId = computed(() => Number(route.params.hotelId))
 
 const date = ref(new Date().toISOString().slice(0,10))
-const rooms = ref([]) // [{...RoomStatusDto}]
-const floor = ref('') // 필터
+const rooms = ref([])
+const floor = ref('')
 
-const hkOptions = ['CLEAN','DIRTY','INSPECT']
-const stOptions = ['ACTIVE','OUT_OF_SERVICE']
+const HK_FREE = ['CLEAN','DIRTY','INSPECTED']  // 비점유 시 노출
+const ST_OPTIONS = ['ACTIVE','INACTIVE']
+
+function normalizeRoom(r) {
+  const occupied = !!r.occupied
+  const hkRaw = r.hkStatus ?? r.housekeeping ?? 'CLEAN'
+  return {
+    ...r,
+    occupied,
+    // 점유 중엔 화면표시는 OCCUPIED로 하되, 원래 HK값은 보존
+    hkStatus: occupied ? 'OCCUPIED' : hkRaw,
+    _hkSaved: hkRaw,   // (선택) 점유 해제 시 복원용
+    status:   r.status || 'ACTIVE',
+  }
+}
 
 async function load() {
   const url = `/api/owner/hotels/${hotelId.value}/rooms/status?date=${date.value}`
   const res = await api(url)
-  rooms.value = res.ok ? await res.json() : []
+  const data = res.ok ? await res.json() : []
+  rooms.value = data.map(normalizeRoom)
 }
 
+/** 하우스키핑 변경: HK → 상태 강제 매핑
+ *  CLEAN -> ACTIVE
+ *  DIRTY -> INACTIVE
+ *  INSPECTED -> INACTIVE
+ */
 async function setHk(r, hk) {
-  const res = await api(`/api/owner/hotels/${hotelId.value}/rooms/${r.id}/housekeeping`, {
-    method:'PATCH', body: JSON.stringify({ housekeepingStatus: hk })
-  })
-  if (res.ok) { r.hkStatus = hk } else alert('변경 실패')
+  if (r.occupied) return // 정책: 점유 중 HK 변경 금지
+
+  // 1) HK 저장 (날짜 포함)
+  const res = await api(
+    `/api/owner/hotels/${hotelId.value}/rooms/${r.id}/housekeeping?date=${date.value}`,
+    { method:'PATCH', body: JSON.stringify({ housekeepingStatus: hk }) }
+  )
+  if (!res.ok) { alert('변경 실패'); return }
+
+  r.hkStatus = hk
+
+  // 2) HK → 운영상태 동기화
+  let targetStatus = null
+  if (hk === 'CLEAN') targetStatus = 'ACTIVE'
+  else if (hk === 'DIRTY' || hk === 'INSPECTED') targetStatus = 'INACTIVE'
+
+  if (targetStatus && r.status !== targetStatus) {
+    const res2 = await api(
+      `/api/owner/hotels/${hotelId.value}/rooms/${r.id}/status`,
+      { method:'PATCH', body: JSON.stringify({ status: targetStatus }) }
+    )
+    if (res2.ok) r.status = targetStatus
+    else console.warn(`상태(${targetStatus}) 동기화 실패`)
+  }
 }
+
+/** 운영 상태 변경: 최소 동기화만 유지 (ACTIVE->CLEAN, INACTIVE->DIRTY) */
 async function setStatus(r, st) {
-  const res = await api(`/api/owner/hotels/${hotelId.value}/rooms/${r.id}/status`, {
-    method:'PATCH', body: JSON.stringify({ status: st })
-  })
-  if (res.ok) { r.status = st } else alert('변경 실패')
+  const res = await api(
+    `/api/owner/hotels/${hotelId.value}/rooms/${r.id}/status`,
+    { method:'PATCH', body: JSON.stringify({ status: st }) }
+  )
+  if (!res.ok) { alert('변경 실패'); return }
+
+  r.status = st
+
+  // 상태 → HK 최소 동기화 (비점유일 때만)
+  if (!r.occupied) {
+    if (st === 'ACTIVE' && r.hkStatus !== 'CLEAN') {
+      const res2 = await api(
+        `/api/owner/hotels/${hotelId.value}/rooms/${r.id}/housekeeping?date=${date.value}`,
+        { method:'PATCH', body: JSON.stringify({ housekeepingStatus: 'CLEAN' }) }
+      )
+      if (res2.ok) r.hkStatus = 'CLEAN'
+      else console.warn('하우스키핑(CLEAN) 동기화 실패')
+    }
+    if (st === 'INACTIVE' && r.hkStatus !== 'DIRTY' && r.hkStatus !== 'OCCUPIED') {
+      const res2 = await api(
+        `/api/owner/hotels/${hotelId.value}/rooms/${r.id}/housekeeping?date=${date.value}`,
+        { method:'PATCH', body: JSON.stringify({ housekeepingStatus: 'DIRTY' }) }
+      )
+      if (res2.ok) r.hkStatus = 'DIRTY'
+      else console.warn('하우스키핑(DIRTY) 동기화 실패')
+    }
+  }
+}
+
+/** 카드 클릭 → HK 상태 순환 / Shift+클릭 → 운영 상태 토글 */
+async function onCardClick(r, e) {
+  if (e.shiftKey) {
+    const next = r.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE'
+    await setStatus(r, next)
+    return
+  }
+  if (r.occupied) return
+  const curr = r.hkStatus || 'CLEAN'
+  const idx = HK_FREE.indexOf(curr)
+  const next = HK_FREE[(idx + 1) % HK_FREE.length] || 'CLEAN'
+  await setHk(r, next)
 }
 
 const floors = computed(() => {
@@ -42,11 +120,24 @@ const filtered = computed(() => {
     .sort((a,b)=> a.floor-b.floor || a.roomNumber-b.roomNumber)
 })
 
+/** 배경색 규칙:
+ *  점유 빨강 > DIRTY 노랑 > INSPECTED 회색 > 나머지(CLEAN 등) 초록
+ *  (요청: INACTIVE 회색 처리는 제거)
+ */
 function badgeClass(r){
+  const hk = r.hkStatus || 'CLEAN'
   if (r.occupied) return 'bg-red-100 text-red-700 border-red-300'
-  if (r.status === 'OUT_OF_SERVICE') return 'bg-gray-100 text-gray-700 border-gray-300'
-  if (r.hkStatus === 'DIRTY') return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+  if (hk === 'DIRTY') return 'bg-yellow-100 text-yellow-700 border-yellow-300'
+  if (hk === 'INSPECTED') return 'bg-gray-200 text-gray-700 border-gray-400'
+  // INACTIVE 회색 처리 제거됨
   return 'bg-green-100 text-green-700 border-green-300'
+}
+
+function displayHk(r){
+  return r.occupied ? 'OCCUPIED' : (r.hkStatus ?? r.housekeeping ?? 'CLEAN')
+}
+function hkOptionsFor(r){
+  return r.occupied ? ['OCCUPIED'] : HK_FREE
 }
 
 onMounted(load)
@@ -70,9 +161,15 @@ onMounted(load)
       </div>
     </div>
 
-    <!-- 카드 그리드 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      <div v-for="r in filtered" :key="r.id" class="border rounded-2xl p-4 space-y-3" :class="badgeClass(r)">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+      <div
+        v-for="r in filtered"
+        :key="r.id"
+        class="border rounded-2xl p-4 space-y-3 cursor-pointer transition hover:shadow"
+        :class="badgeClass(r)"
+        @click="(e)=>onCardClick(r, e)"
+        :title="'클릭: HK 순환 / Shift+클릭: 운영상태 토글'"
+      >
         <div class="flex items-baseline justify-between">
           <div class="text-lg font-bold">{{ r.roomNumber }}</div>
           <div class="text-xs">{{ r.floor }}층 · {{ r.roomTypeCode }}</div>
@@ -80,17 +177,37 @@ onMounted(load)
         <div class="text-sm">
           정원 {{ r.capacity ?? '-' }}명 · {{ r.roomTypeName }}
         </div>
+
+        <!-- 대표 투숙객 (점유시에만) -->
+        <div v-if="r.occupied && (r.guestName || r.guestPhone)" class="text-xs">
+          대표 투숙객: <b>{{ r.guestName || '-' }}</b>
+          <span v-if="r.guestPhone"> · {{ r.guestPhone }}</span>
+        </div>
+
+        <!-- ✅ 표기 순서: 하우스키핑 → 상태 -->
         <div class="text-xs">
-          상태: <b>{{ r.status }}</b> · 하우스키핑: <b>{{ r.hkStatus }}</b>
-          <span v-if="r.occupied" class="ml-2 px-2 py-0.5 text-[11px] rounded bg-red-500 text-white">OCCUPIED</span>
+          하우스키핑: <b>{{ displayHk(r) }}</b>
+          · 상태: <b>{{ r.status || 'ACTIVE' }}</b>
         </div>
 
         <div class="flex gap-2 flex-wrap">
-          <select class="border rounded-lg px-2 py-1" :value="r.hkStatus" @change="e=>setHk(r, e.target.value)">
-            <option v-for="h in hkOptions" :key="h" :value="h">{{ h }}</option>
+          <select
+            class="border rounded-lg px-2 py-1"
+            :value="displayHk(r)"
+            :disabled="r.occupied"
+            @click.stop
+            @change="e=>setHk(r, e.target.value)"
+          >
+            <option v-for="h in hkOptionsFor(r)" :key="h" :value="h">{{ h }}</option>
           </select>
-          <select class="border rounded-lg px-2 py-1" :value="r.status" @change="e=>setStatus(r, e.target.value)">
-            <option v-for="s in stOptions" :key="s" :value="s">{{ s }}</option>
+
+          <select
+            class="border rounded-lg px-2 py-1"
+            :value="r.status || 'ACTIVE'"
+            @click.stop
+            @change="e=>setStatus(r, e.target.value)"
+          >
+            <option v-for="s in ST_OPTIONS" :key="s" :value="s">{{ s }}</option>
           </select>
         </div>
       </div>

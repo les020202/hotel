@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class OwnerRoomsService {
@@ -20,41 +22,47 @@ public class OwnerRoomsService {
         this.roomRepo = roomRepo;
     }
 
-    /** 객실 현황 조회 */
     @Transactional(readOnly = true)
     public List<RoomStatusDto> getStatus(Long hotelId, LocalDate date) {
-        // 소유자 검증
         guard.assertOwnerOfHotel(hotelId);
-
         LocalDate target = (date != null) ? date : LocalDate.now();
-        return repo.findStatus(hotelId, target);
+
+        // 1) 기본 현황
+        List<RoomStatusDto> rows = repo.findStatus(hotelId, target);
+
+        // 2) 방별 대표 투숙객
+        var guestRows = repo.findGuestByRoomOnDate(hotelId, target);
+        Map<Long, OwnerRoomsRepository.RoomGuestProjection> guestMap =
+                guestRows.stream().collect(Collectors.toMap(
+                        OwnerRoomsRepository.RoomGuestProjection::getRoomId,
+                        g -> g
+                ));
+
+        // 3) 머지
+        for (RoomStatusDto dto : rows) {
+            var g = guestMap.get(dto.getId());
+            if (g != null) {
+                dto.setGuestName(g.getGuestName());
+                dto.setGuestPhone(g.getGuestPhone());
+            }
+        }
+        return rows;
     }
 
-    /** 하우스키핑 상태 변경 */
     @Transactional
     public void updateHk(Long hotelId, Long roomId, HousekeepingStatus hk) {
-        // 소유자 검증
         guard.assertOwnerOfHotel(hotelId);
-
         RoomEntity r = roomRepo.findById(roomId).orElseThrow();
-        if (!r.getHotelId().equals(hotelId)) {
-            throw new IllegalArgumentException("room mismatch");
-        }
+        if (!r.getHotelId().equals(hotelId)) throw new IllegalArgumentException("room mismatch");
         r.setHousekeeping(hk);
-        // JPA dirty checking 또는 명시 저장
         roomRepo.save(r);
     }
 
-    /** 객실 운영 상태 변경 */
     @Transactional
     public void updateStatus(Long hotelId, Long roomId, RoomStatus st) {
-        // 소유자 검증
         guard.assertOwnerOfHotel(hotelId);
-
         RoomEntity r = roomRepo.findById(roomId).orElseThrow();
-        if (!r.getHotelId().equals(hotelId)) {
-            throw new IllegalArgumentException("room mismatch");
-        }
+        if (!r.getHotelId().equals(hotelId)) throw new IllegalArgumentException("room mismatch");
         r.setStatus(st);
         roomRepo.save(r);
     }
