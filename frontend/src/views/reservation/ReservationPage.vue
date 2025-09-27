@@ -357,7 +357,8 @@ async function requestPay() {
       checkIn: checkIn.value || '',
       checkOut: checkOut.value || '',
       guests: String(guests.value ?? 1),
-      guestName: guest.name || ''
+      guestName: guest.name || '',
+      guestPhone: (guest.phone || '').replace(/\D/g, '')
     }).toString()
 
     await paymentWidget.value.requestPayment({

@@ -7,5 +7,7 @@ public record ConfirmRequest(
     @NotBlank String paymentKey,
     @NotBlank String orderId,
     @Positive long amount,      // int → long
-    String holdCode             // @NotBlank 제거 (optional)
+    String holdCode,            // @NotBlank 제거 (optional)
+    String guestName,
+    String guestPhone
 ) {}

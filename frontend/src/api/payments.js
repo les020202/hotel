@@ -13,11 +13,9 @@ const noAuth = axios.create({
   withCredentials: true,
 })
 
-// 결제 승인 요청
-export const confirmPayment = ({ paymentKey, orderId, amount, holdCode }) => {
-  const payload = { paymentKey, orderId, amount }
-  if (holdCode) payload.holdCode = holdCode
-  // 🔑 여기엔 '/payments/confirm' (앞에 /api 붙이지 않음!)
+// 결제 승인 요청: 받은 바디를 그대로 전송 (guestName/guestPhone 포함)
+export const confirmPayment = (payload) => {
+  // payload: { paymentKey, orderId, amount, holdCode?, guestName?, guestPhone? }
   return noAuth.post('/payments/confirm', payload).then(r => r.data)
 }
 

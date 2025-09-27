@@ -15,7 +15,10 @@ public class TossPaymentController {
 
     @PostMapping("/confirm")
     public ResponseEntity<PaymentConfirmResponse> confirm(@Valid @RequestBody ConfirmRequest req) {
-        var out = orchestrator.confirmToss(req.paymentKey(), req.orderId(), req.amount(), req.holdCode());
+        PaymentConfirmResponse out = orchestrator.confirmToss(
+            req.paymentKey(), req.orderId(), req.amount(), req.holdCode(),
+            req.guestName(), req.guestPhone()
+        );
         return ResponseEntity.ok(out);
     }
 }

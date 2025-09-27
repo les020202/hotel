@@ -9,11 +9,11 @@ import com.example.hotelres.owner.BookingRepository;
 import com.example.hotelres.owner.BookingStatus;
 import com.example.hotelres.payment.*;
 import com.example.hotelres.reservation.*;
-import com.example.hotelres.reservation.MyBookingQueryRepository; // ✅ 추가
-import com.example.hotelres.tosspayment.dto.TossConfirmResponse;
+import com.example.hotelres.reservation.MyBookingQueryRepository;
 import com.example.hotelres.tosspayment.dto.PaymentConfirmResponse;
-import com.example.hotelres.user.UserRepository;
+import com.example.hotelres.tosspayment.dto.TossConfirmResponse;
 import com.example.hotelres.user.User;
+import com.example.hotelres.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,12 +40,17 @@ public class PaymentsOrchestrator {
 
     private final EmailService emailService;
     private final UserRepository userRepository;
-    private final MyBookingQueryRepository myBookingQueryRepository; // ✅ 추가
+    private final MyBookingQueryRepository myBookingQueryRepository;
+
+    private final BookingGuestRepository bookingGuestRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
-    public PaymentConfirmResponse confirmToss(String paymentKey, String orderId, long amount, String holdCode) {
+    public PaymentConfirmResponse confirmToss(
+            String paymentKey, String orderId, long amount, String holdCode,
+            String guestNameFromClient, String guestPhoneFromClient
+    ) {
         // 멱등
         var existing = paymentRepository.findByProviderRef(paymentKey);
         if (existing.isPresent()) {
@@ -59,7 +65,8 @@ public class PaymentsOrchestrator {
             return new PaymentConfirmResponse(p.getBookingId(), p.getId(), receiptUrl0);
         }
 
-        log.info(">>> ConfirmToss req: paymentKey={}, orderId={}, reqAmount={}, holdCode={}", paymentKey, orderId, amount, holdCode);
+        log.info(">>> ConfirmToss req: paymentKey={}, orderId={}, reqAmount={}, holdCode={}",
+                paymentKey, orderId, amount, holdCode);
 
         // 1) 홀드 조회
         BookingHold hold = bookingHoldRepository.findByHoldCode(holdCode);
@@ -96,6 +103,37 @@ public class PaymentsOrchestrator {
         booking.setVoucherNo(orderId);
         booking.setStatus(BookingStatus.CONFIRMED);
         bookingRepository.save(booking);
+
+        // 3.5) 투숙객 저장 (클라이언트 값 > Toss 응답 > 유저 이름)
+        try {
+            String name = normalize(guestNameFromClient);
+            String phone = digitsOnly(guestPhoneFromClient);
+
+            // ✅ 이름 '또는' 전화 중 하나라도 비면 보강 시도
+            if (isBlank(name) || isBlank(phone)) {
+                // Toss 응답에서 보강 (있을 수도, 없을 수도)
+                Map<?, ?> m = objectMapper.convertValue(res, Map.class);
+                if (isBlank(name))  name  = normalize(asString(m.get("customerName")));
+                if (isBlank(phone)) phone = digitsOnly(asString(m.get("customerMobilePhone")));
+            }
+            if (isBlank(name) && hold.getUserId() != null) {
+                // 최종 보강: 유저명
+                name = userRepository.findById(hold.getUserId()).map(User::getName).orElse(null);
+            }
+
+            if (!isBlank(name)) {
+                BookingGuest guest = BookingGuest.builder()
+                        .booking(booking)
+                        .name(name)
+                        .phone(isBlank(phone) ? null : phone)
+                        .build();
+                bookingGuestRepository.save(guest);
+            } else {
+                log.info("booking_guests 저장 스킵: 이름이 비어 있음 (bookingId={})", booking.getId());
+            }
+        } catch (Exception guestEx) {
+            log.warn("booking_guests 저장 실패: {}", guestEx.toString());
+        }
 
         // 4) 라인아이템
         BookingItemEntity item = BookingItemEntity.builder()
@@ -143,14 +181,14 @@ public class PaymentsOrchestrator {
         // 7) 홀드 삭제
         bookingHoldRepository.delete(hold);
 
-        // 8) 영수증 URL (프론트 응답용 — 메일에는 사용 안 함)
+        // 8) 영수증 URL
         String receiptUrl = null;
         if (res.receipt() != null) {
             Object urlObj = res.receipt().get("url");
             if (urlObj != null) receiptUrl = String.valueOf(urlObj);
         }
 
-        // 9) ✅ 메일 발송 데이터: 쿼리 레포에서 호텔/객실명 한 번에 가져오기
+        // 9) 확인 메일
         try {
             String toEmail = null;
             String customerName = null;
@@ -165,7 +203,6 @@ public class PaymentsOrchestrator {
             }
 
             if (toEmail != null && !toEmail.isBlank()) {
-                // 단건 요약 가져오기 (hotelName, roomTypeName 포함)
                 var rowOpt = myBookingQueryRepository.findMyBooking(hold.getUserId(), booking.getId());
                 String hotelName = rowOpt.map(MyBookingQueryRepository.MyBookingRow::getHotelName).orElse("");
                 String roomTypeName = rowOpt.map(MyBookingQueryRepository.MyBookingRow::getRoomTypeName).orElse("");
@@ -188,7 +225,6 @@ public class PaymentsOrchestrator {
             log.warn("예약확인 메일 전송 실패: {}", mailEx.toString());
         }
 
-        // 10) 응답
         return new PaymentConfirmResponse(booking.getId(), p.getId(), receiptUrl);
     }
 
@@ -199,4 +235,10 @@ public class PaymentsOrchestrator {
         if ("간편결제".equals(r.method()) || r.easyPay() != null) return "EASYPAY";
         return "OTHER";
     }
+
+    // helpers
+    private static String asString(Object o) { return (o instanceof String s) ? s : null; }
+    private static String digitsOnly(String s) { return (s == null) ? null : s.replaceAll("\\D", ""); }
+    private static String normalize(String s) { return (s == null) ? null : s.trim(); }
+    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
 }

@@ -92,6 +92,7 @@ const checkIn      = ref('')
 const checkOut     = ref('')
 const guests       = ref(1)
 const guestName    = ref('')
+const guestPhone   = ref('')
 
 /* --------- Server response --------- */
 const resp        = ref(null)
@@ -126,6 +127,7 @@ function readParams () {
   checkOut.value     = String(route.query.checkOut     || '')
   guests.value       = route.query.guests ? Number(route.query.guests) : 1
   guestName.value    = String(route.query.guestName    || '')
+  guestPhone.value   = String(route.query.guestPhone   || '')
 }
 
 async function confirmOnServer () {
@@ -152,7 +154,9 @@ async function confirmOnServer () {
       paymentKey: paymentKey.value,
       orderId:    orderId.value,
       amount:     Number(amount.value),
-      holdCode:   holdCode.value || undefined
+      holdCode:   holdCode.value || undefined,
+      guestName:  guestName.value || undefined,
+      guestPhone: (guestPhone.value || '').replace(/\D/g, '') || undefined
     })
 
     resp.value = data
