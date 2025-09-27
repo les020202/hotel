@@ -44,4 +44,7 @@ public interface CouponIssuanceRepository extends JpaRepository<CouponIssuance, 
     List<CouponIssuance> findAvailableForUser(@Param("userId") Long userId,
                                               @Param("today") LocalDate today,
                                               @Param("now") LocalDateTime now);
+                                              
+    boolean existsByUserIdAndCouponId(Long userId, Long couponId);
+
 }

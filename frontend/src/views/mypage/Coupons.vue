@@ -1,3 +1,4 @@
+<!-- src/views/coupons/CouponPage.vue (예시 경로: 기존 파일 교체) -->
 <template>
   <div class="coupon-page page">
     <div class="topbar">
@@ -5,6 +6,24 @@
       <div class="topbar-title">내 쿠폰함</div>
       <span class="spacer" aria-hidden="true"></span>
     </div>
+
+    <!-- ✅ 쿠폰 코드 입력/지급 박스 -->
+    <div class="claim-box">
+      <input
+        class="claim-input"
+        v-model.trim="claimCode"
+        maxlength="64"
+        placeholder="쿠폰 코드를 입력하세요"
+        @keyup.enter="onClaim"
+      />
+      <button class="btn-claim" :disabled="claiming || !claimCode" @click="onClaim">
+        <span v-if="!claiming">지급</span>
+        <span v-else class="spinner" aria-label="처리중"></span>
+      </button>
+    </div>
+    <p v-if="claimMsg" class="claim-msg" :class="{ ok: claimOk, bad: !claimOk }">
+      {{ claimMsg }}
+    </p>
 
     <div class="tabs">
       <button
@@ -80,10 +99,7 @@
             </div>
             <div class="line">
               <span class="label">기간</span>
-              <span
-                class="value period"
-                :class="{ infinite: !c.validFrom && !c.validTo }"
-              >
+              <span class="value period" :class="{ infinite: !c.validFrom && !c.validTo }">
                 <span class="cal-ico" aria-hidden="true">📅</span>
                 {{ c.validFrom ? c.validFrom : '제한없음' }}
                 <span class="tilde">~</span>
@@ -111,12 +127,18 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { fetchMyCoupons } from '@/api/couponsApi'
+import { fetchMyCoupons, claimCoupon } from '@/api/couponsApi'
 
 const items = ref([])
 const showAll = ref(true)
 const err = ref('')
 const loading = ref(false)
+
+/* claim UI state */
+const claimCode = ref('')
+const claiming  = ref(false)
+const claimMsg  = ref('')
+const claimOk   = ref(false)
 
 const tabs = [
   { key: 'all', label: '전체' },
@@ -129,7 +151,6 @@ async function load () {
   err.value = ''
   loading.value = true
   try {
-    // ✅ 이제 서버가 coupon_issuance 기준 목록을 내려줌
     items.value = await fetchMyCoupons({ all: showAll.value })
   } catch (e) {
     err.value = `쿠폰 조회 실패: ${e?.response?.status || ''}`
@@ -157,12 +178,12 @@ function isExpired (c) {
 const isValidToday = (c) => {
   const today = new Date().toISOString().slice(0, 10)
   const fromOk = !c.validFrom || c.validFrom <= today
-  const toOk = !c.validTo || c.validTo >= today
+  const toOk   = !c.validTo   || c.validTo   >= today
   return c.status === 'AVAILABLE' && fromOk && toOk
 }
 
 const filtered = computed(() => {
-  if (activeTab.value === 'valid') return items.value.filter(isValidToday)
+  if (activeTab.value === 'valid')   return items.value.filter(isValidToday)
   if (activeTab.value === 'expired') return items.value.filter((c) => isExpired(c))
   return items.value
 })
@@ -173,8 +194,8 @@ function formatMoney (v) {
 
 function statusLabel (status, c) {
   if (status === 'AVAILABLE') return isExpired(c) ? '만료' : '사용 가능'
-  if (status === 'USED') return '사용 완료'
-  if (status === 'EXPIRED') return '만료'
+  if (status === 'USED')      return '사용 완료'
+  if (status === 'EXPIRED')   return '만료'
   return status
 }
 
@@ -187,16 +208,62 @@ async function copy (text) {
   }
 }
 
+/* ✅ 쿠폰 지급 */
+async function onClaim () {
+  claimMsg.value = ''
+  claimOk.value  = false
+  const code = (claimCode.value || '').trim()
+  if (!code) return
+
+  try {
+    claiming.value = true
+    const res = await claimCoupon(code)
+    // 서버에서 메시지/지급정보 리턴한다고 가정
+    claimOk.value  = true
+    claimMsg.value = (res?.message || '쿠폰이 지급되었습니다.')
+    claimCode.value = ''
+    // 목록 즉시 갱신
+    await load()
+  } catch (e) {
+    const status = e?.response?.status
+    const data   = e?.response?.data
+    claimOk.value  = false
+    // 대표적인 에러 메시지 처리
+    claimMsg.value = data?.message
+      || (status === 404 ? '존재하지 않는 쿠폰 코드입니다.' :
+          status === 409 ? '이미 보유했거나 지급 불가한 쿠폰입니다.' :
+          `지급 실패 [${status ?? 'ERR'}]`)
+  } finally {
+    claiming.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
 <style scoped>
-/* (기존 스타일 그대로) — 생략 없이 포함 */
 .page { max-width: 980px; margin: 0 auto; padding: 16px; }
 .topbar { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #f1f5f9; margin: -16px -16px 16px; background: #fff; }
 .icon { border: 0; background: transparent; font-size: 24px; cursor: pointer; }
 .topbar-title { font-weight: 700; font-size: 18px; flex: 1; text-align: center; }
 .spacer { display: inline-block; width: 34px; }
+
+/* ✅ claim box */
+.claim-box{
+  display:flex; gap:8px; align-items:center;
+  padding: 10px; border:1px solid #e5e7eb; border-radius: 12px; background:#fff; margin-bottom:12px;
+}
+.claim-input{
+  flex:1; height:38px; border:1px solid #e5e7eb; border-radius:10px; padding:0 12px; font-size:14px; outline:none;
+}
+.claim-input:focus{ box-shadow:0 0 0 3px rgba(14,165,233,.18); border-color:#bae6fd; }
+.btn-claim{
+  height:38px; padding:0 14px; border-radius:10px; border:1px solid #0ea5e9; background:#0ea5e9; color:#fff; font-weight:800; cursor:pointer;
+}
+.btn-claim:disabled{ opacity:.6; cursor:not-allowed; }
+.claim-msg{ margin:8px 2px 6px; font-size:13px; }
+.claim-msg.ok{ color:#065f46; }
+.claim-msg.bad{ color:#b91c1b; }
 
 .tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 16px; }
 .tab { padding: 6px 12px; border: 1px solid #e5e7eb; background: #fff; color: #111827; border-radius: 999px; font-size: 13px; cursor: pointer; }
@@ -256,4 +323,8 @@ onMounted(load)
 .sk-w-40 { width: 40%; }
 .sk-w-70 { width: 70%; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* small spinner */
+.spinner{ display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,.15); border-top-color:#0f172a; border-radius:50%; animation:spin 1s linear infinite }
+@keyframes spin{ to{ transform:rotate(360deg) } }
 </style>
