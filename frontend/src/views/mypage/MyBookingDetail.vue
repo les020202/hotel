@@ -1,4 +1,4 @@
-<!-- src/views/HistoryDetail.vue (예시: 예약 상세 화면 컴포넌트) -->
+<!-- src/views/HistoryDetail.vue -->
 <template>
   <div class="page">
     <!-- 상단 앱바 -->
@@ -82,21 +82,13 @@
 
         <div class="divider"></div>
 
-        <!-- 기본 정보 -->
+        <!-- ✅ 체크인/아웃 + (N박) 한 줄로 자연스럽게 -->
         <section class="grid info-grid">
           <div class="label">
-            <span class="ico" aria-hidden="true">📅</span> 체크인
-          </div>
-          <div class="value">{{ fmtDate(row.checkIn) }}</div>
-
-        </section>
-        <section class="grid info-grid">
-          <div class="label">
-            <span class="ico" aria-hidden="true">📆</span> 체크아웃
+            <span class="ico" aria-hidden="true">📅</span> 체크인 · 체크아웃
           </div>
           <div class="value">
-            {{ fmtDate(row.checkOut) }}
-            <span v-if="row.nights" class="sub">({{ row.nights }}박)</span>
+            {{ inOutText }}
           </div>
 
           <div class="label">
@@ -104,7 +96,7 @@
           </div>
           <div class="value">{{ row.guests }}명</div>
 
-          <!-- ✅ 추가: 대표 투숙객 -->
+          <!-- 대표 투숙객 -->
           <div class="label">
             <span class="ico" aria-hidden="true">🧑</span> 대표 투숙객
           </div>
@@ -198,6 +190,15 @@ const displayCanceledAt = computed(() => {
   return s.includes('T') ? s.replace('T', ' ').slice(0, 16) : (s || '-')
 })
 
+/* ✅ 체크인/체크아웃 + (N박) 한 줄 표시 */
+const inOutText = computed(() => {
+  const ci = fmtDate(row.value?.checkIn)
+  const co = fmtDate(row.value?.checkOut)
+  const nights = row.value?.nights
+  const range = [ci, co].filter(Boolean).join(' ~ ')
+  return range + (nights ? ` (${nights}박)` : '')
+})
+
 /* ---------- 취소 가능 여부(사용자 규칙: 전날 23:59까지) ---------- */
 const canCancel = computed(() => {
   if (!row.value) return false
@@ -205,7 +206,7 @@ const canCancel = computed(() => {
   const cin = normalizeDate(row.value.checkIn)
   if (!cin) return false
   const today = todayStr()
-  return today < cin          // 오늘 < 체크인 날짜
+  return today < cin
 })
 
 const cannotCancelReason = computed(
@@ -244,7 +245,6 @@ async function doCancel({ reason }) {
     alert('예약이 취소되었습니다.')
   } catch (e) {
     console.error(e)
-    // 우리 fetch 래퍼(_http.js)는 Error.message에 JSON을 담음
     let msg = '취소에 실패했습니다.'
     try {
       const parsed = JSON.parse(e.message || '{}')
