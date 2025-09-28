@@ -1,4 +1,4 @@
-<!-- src/views/coupons/CouponPage.vue (예시 경로: 기존 파일 교체) -->
+<!-- src/views/coupons/CouponPage.vue -->
 <template>
   <div class="coupon-page page">
     <div class="topbar">
@@ -25,29 +25,19 @@
       {{ claimMsg }}
     </p>
 
-    <div class="tabs">
-      <button
-        v-for="t in tabs"
-        :key="t.key"
-        class="tab"
-        :class="{ active: activeTab === t.key }"
-        @click="activeTab = t.key"
-      >
-        {{ t.label }}
-      </button>
-
+    <!-- ✅ 상단 토글: 기본 해제(사용 가능만 표시) / 체크 시 사용완료+만료 포함 -->
+    <div class="toolbar">
       <label class="inline">
         <input
           type="checkbox"
-          v-model="showAll"
+          v-model="showHistory"
           @change="load"
-          :disabled="activeTab !== 'all'"
         />
-        만료 포함(서버)
+        만료/사용완료 포함(서버)
       </label>
-      <span v-if="activeTab !== 'all'" class="hint">
-        {{ activeTab === 'valid' ? '유효 탭에서는 자동으로 해제됩니다.' : '만료 탭에서는 자동으로 적용됩니다.' }}
-      </span>
+      <small class="hint">
+        {{ showHistory ? '모든 쿠폰(사용가능/사용완료/만료)을 표시합니다.' : '오늘 사용 가능한 쿠폰만 표시합니다.' }}
+      </small>
     </div>
 
     <div v-if="err" class="error">{{ err }}</div>
@@ -66,8 +56,12 @@
 
     <div v-else-if="filtered.length === 0" class="empty">
       <div class="empty-emoji">🎫</div>
-      <div class="empty-title">표시할 쿠폰이 없습니다.</div>
-      <div class="empty-sub">다른 탭(전체/유효/만료)도 확인해 보세요.</div>
+      <div class="empty-title">
+        {{ showHistory ? '표시할 쿠폰이 없습니다.' : '오늘 사용 가능한 쿠폰이 없습니다.' }}
+      </div>
+      <div class="empty-sub">
+        {{ showHistory ? '필터에 해당하는 쿠폰이 없어요.' : '만료/사용완료 쿠폰을 보려면 위 체크를 켜보세요.' }}
+      </div>
       <button class="btn-outline" @click="load">새로고침</button>
     </div>
 
@@ -76,14 +70,14 @@
         v-for="c in filtered"
         :key="c.id"
         class="item coupon-card"
-        :class="{ expired: isExpired(c) }"
+        :class="{ expired: isExpired(c) || c.status === 'EXPIRED' }"
       >
         <div class="card-head">
           <div class="card-title">{{ c.title }}</div>
           <div class="badges">
             <span class="badge" v-if="c.stackable">중복가능</span>
-            <span class="badge danger" v-if="isExpired(c)">만료</span>
             <span class="badge" v-if="c.status === 'USED'">사용완료</span>
+            <span class="badge danger" v-if="isExpired(c) || c.status === 'EXPIRED'">만료</span>
           </div>
         </div>
 
@@ -126,11 +120,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { fetchMyCoupons, claimCoupon } from '@/api/couponsApi'
 
 const items = ref([])
-const showAll = ref(true)
 const err = ref('')
 const loading = ref(false)
 
@@ -140,18 +133,20 @@ const claiming  = ref(false)
 const claimMsg  = ref('')
 const claimOk   = ref(false)
 
-const tabs = [
-  { key: 'all', label: '전체' },
-  { key: 'valid', label: '유효' },
-  { key: 'expired', label: '만료' }
-]
-const activeTab = ref('all')
+/* ✅ 기본: 오늘 사용 가능한 것만 표시. 체크 시 사용완료+만료 포함 */
+const showHistory = ref(false)
 
+/* 서버에서 만료/사용완료 포함 여부를 토글에 맞춰 가져오도록 */
 async function load () {
   err.value = ''
   loading.value = true
   try {
-    items.value = await fetchMyCoupons({ all: showAll.value })
+    const includeExpiredParam = showHistory.value // 체크 시 만료 포함
+    // 일부 백엔드가 USED를 expired와 함께 보내므로 호환용으로 all도 전송
+    items.value = await fetchMyCoupons({
+      includeExpired: includeExpiredParam,
+      all: includeExpiredParam,
+    })
   } catch (e) {
     err.value = `쿠폰 조회 실패: ${e?.response?.status || ''}`
   } finally {
@@ -159,34 +154,20 @@ async function load () {
   }
 }
 
-watch(activeTab, (val) => {
-  if (val === 'valid') {
-    if (showAll.value) { showAll.value = false; load() }
-  } else if (val === 'expired') {
-    if (!showAll.value) { showAll.value = true; load() }
-  } else if (val === 'all') {
-    if (!showAll.value) { showAll.value = true; load() }
-  }
-})
-
+/* === 날짜/상태 유틸 === */
 function isExpired (c) {
+  if (c.status === 'EXPIRED') return true
   if (!c.validTo) return false
   const today = new Date().toISOString().slice(0, 10)
-  return c.validTo < today || c.status === 'EXPIRED'
+  return c.validTo < today
 }
 
-const isValidToday = (c) => {
+function isAvailableToday (c) {
   const today = new Date().toISOString().slice(0, 10)
   const fromOk = !c.validFrom || c.validFrom <= today
   const toOk   = !c.validTo   || c.validTo   >= today
-  return c.status === 'AVAILABLE' && fromOk && toOk
+  return c.status === 'AVAILABLE' && fromOk && toOk && !isExpired(c)
 }
-
-const filtered = computed(() => {
-  if (activeTab.value === 'valid')   return items.value.filter(isValidToday)
-  if (activeTab.value === 'expired') return items.value.filter((c) => isExpired(c))
-  return items.value
-})
 
 function formatMoney (v) {
   return (v ?? 0).toLocaleString('ko-KR', { style: 'currency', currency: 'KRW' })
@@ -218,17 +199,14 @@ async function onClaim () {
   try {
     claiming.value = true
     const res = await claimCoupon(code)
-    // 서버에서 메시지/지급정보 리턴한다고 가정
     claimOk.value  = true
     claimMsg.value = (res?.message || '쿠폰이 지급되었습니다.')
     claimCode.value = ''
-    // 목록 즉시 갱신
     await load()
   } catch (e) {
     const status = e?.response?.status
     const data   = e?.response?.data
     claimOk.value  = false
-    // 대표적인 에러 메시지 처리
     claimMsg.value = data?.message
       || (status === 404 ? '존재하지 않는 쿠폰 코드입니다.' :
           status === 409 ? '이미 보유했거나 지급 불가한 쿠폰입니다.' :
@@ -237,6 +215,26 @@ async function onClaim () {
     claiming.value = false
   }
 }
+
+/* ✅ 필터링
+   - showHistory = false  -> 오늘 사용 가능한 쿠폰만
+   - showHistory = true   -> 전체(사용가능 + 사용완료 + 만료), 정렬: 사용가능 → 사용완료 → 만료
+*/
+const filtered = computed(() => {
+  if (!showHistory.value) return items.value.filter(isAvailableToday)
+
+  const available = []
+  const used = []
+  const expired = []
+
+  for (const c of items.value) {
+    if (isAvailableToday(c)) available.push(c)
+    else if (c.status === 'USED') used.push(c)
+    else if (isExpired(c) || c.status === 'EXPIRED') expired.push(c)
+    // 그 외 상태는 요구사항 외라서 표시하지 않음
+  }
+  return [...available, ...used, ...expired]
+})
 
 onMounted(load)
 </script>
@@ -265,11 +263,10 @@ onMounted(load)
 .claim-msg.ok{ color:#065f46; }
 .claim-msg.bad{ color:#b91c1b; }
 
-.tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 16px; }
-.tab { padding: 6px 12px; border: 1px solid #e5e7eb; background: #fff; color: #111827; border-radius: 999px; font-size: 13px; cursor: pointer; }
-.tab.active { background: #0ea5e9; border-color: #0ea5e9; color: #fff; }
-.tabs .inline { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: #475569; font-size: 13px; }
-.hint { color: #64748b; font-size: 12px; }
+/* ✅ 힌트/토글 영역 */
+.toolbar { display:flex; align-items:center; gap:12px; margin: 8px 0 16px; }
+.toolbar .inline { display:inline-flex; align-items:center; gap:6px; color:#475569; font-size:13px; }
+.hint { color:#64748b; font-size:12px; }
 
 .list { display: grid; gap: 12px; }
 .item { position: relative; border: 1px solid #e5e7eb; padding: 14px 14px 12px; border-radius: 14px; background: #fff; transition: box-shadow .15s ease, transform .05s ease; }
@@ -291,14 +288,14 @@ onMounted(load)
 .label { color: #64748b; font-size: 13px; }
 .value { color: #0f172a; }
 
-.code { display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; border: 1 dashed #e2e8f0; padding: 4px 8px; border-radius: 8px; font-size: 13px; }
+.code { display: inline-flex; align-items: center; gap: 6px; background: #f8fafc; border: 1px dashed #e2e8f0; padding: 4px 8px; border-radius: 8px; font-size: 13px; }
 
 .period { display: inline-flex; align-items: center; gap: 8px; background: #eef6ff; border: 1px solid #dbeafe; padding: 6px 10px; border-radius: 10px; font-size: 15px; font-weight: 700; color: #0f172a; }
 .period .tilde { opacity: .7; padding: 0 2px; }
 .period.infinite { background: #ecfdf5; border-color: #bbf7d0; }
 .cal-ico { font-size: 16px; }
 
-.coupon-card.expired { opacity: .85; }
+.coupon-card.expired { opacity: .9; }
 .coupon-card.expired .amount { color: #334155; }
 .coupon-card.expired .period { background: #fff1f2; border-color: #fecaca; color: #991b1b; }
 

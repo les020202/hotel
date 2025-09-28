@@ -66,8 +66,11 @@ public class MyBookingsController {
         return new MyBookingSummary(
                 r.getBookingId(),
                 r.getStatus(),
+
+                r.getHotelId(),       // ✅ 추가
                 r.getHotelName(),
                 r.getRoomTypeName(),
+
                 in,
                 out,
                 r.getNights(),
@@ -76,12 +79,10 @@ public class MyBookingsController {
                 r.getCurrency(),
                 r.getReceiptUrl(),
 
-                // ▼ 취소 메타 (레포에서 DATE_FORMAT으로 String으로 내려옴)
                 r.getCanceledAt(),
                 r.getCanceledBy(),
                 r.getCancelReason(),
 
-                // ▼ 대표 투숙객
                 r.getGuestName(),
                 r.getGuestPhone()
         );

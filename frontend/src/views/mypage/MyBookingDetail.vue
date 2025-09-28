@@ -1,4 +1,3 @@
-<!-- src/views/HistoryDetail.vue -->
 <template>
   <div class="page">
     <!-- 상단 앱바 -->
@@ -12,7 +11,6 @@
 
       <!-- 우측 액션 -->
       <div class="topbar-right text-right">
-        <!-- 취소 가능 -->
         <button
           v-if="row && row.status !== 'CANCELLED' && canCancel"
           class="btn danger"
@@ -21,7 +19,6 @@
           예약 취소
         </button>
 
-        <!-- 취소 불가(컷오프 경과) -->
         <div
           v-else-if="row && row.status !== 'CANCELLED' && !canCancel"
           class="flex flex-col items-end"
@@ -82,38 +79,31 @@
 
         <div class="divider"></div>
 
-        <!-- ✅ 체크인/아웃 + (N박) 한 줄로 자연스럽게 -->
+        <!-- 체크인/아웃 -->
         <section class="grid info-grid">
-          <div class="label">
-            <span class="ico" aria-hidden="true">📅</span> 체크인 · 체크아웃
-          </div>
-          <div class="value">
-            {{ inOutText }}
-          </div>
+          <div class="label"><span class="ico" aria-hidden="true">📅</span> 체크인 · 체크아웃</div>
+          <div class="value">{{ inOutText }}</div>
 
-          <div class="label">
-            <span class="ico" aria-hidden="true">👥</span> 인원
-          </div>
+          <div class="label"><span class="ico" aria-hidden="true">👥</span> 인원</div>
           <div class="value">{{ row.guests }}명</div>
 
-          <!-- 대표 투숙객 -->
-          <div class="label">
-            <span class="ico" aria-hidden="true">🧑</span> 대표 투숙객
-          </div>
+          <div class="label"><span class="ico" aria-hidden="true">🧑</span> 대표 투숙객</div>
           <div class="value">{{ row.guestName || '-' }}</div>
 
-          <div class="label">
-            <span class="ico" aria-hidden="true">📞</span> 연락처
-          </div>
+          <div class="label"><span class="ico" aria-hidden="true">📞</span> 연락처</div>
           <div class="value">{{ row.guestPhone || '-' }}</div>
 
-          <div class="label">
-            <span class="ico" aria-hidden="true">🏨</span> 호텔 상세
-          </div>
+          <div class="label"><span class="ico" aria-hidden="true">🏨</span> 호텔 상세</div>
           <div class="value">
-            <button class="link-as-btn" type="button" @click="goHotelDetail(row)">
+            <!-- ✅ 호텔 상세로 이동 -->
+            <RouterLink
+              v-if="hotelLink"
+              class="link-as-btn"
+              :to="hotelLink"
+            >
               View Place
-            </button>
+            </RouterLink>
+            <span v-else class="value sub">호텔 정보 없음</span>
           </div>
         </section>
 
@@ -158,28 +148,46 @@ const id = Number(route.params.id)
 function normalizeBooking(r = {}) {
   const n = { ...r }
 
+  // 공통 id
   n.bookingId = r.bookingId ?? r.id ?? r.booking_id ?? null
 
+  // 상태
   if (typeof r.status === 'string') n.status = r.status.trim().toUpperCase()
 
+  // 취소 관련
   n.canceledAt =
     r.canceledAt ?? r.cancelledAt ?? r.canceled_at ?? r.cancelled_at ?? null
   n.canceledBy =
     r.canceledBy ?? r.cancelledBy ?? r.canceled_by ?? r.cancelled_by ?? null
   n.cancelReason = r.cancelReason ?? r.cancel_reason ?? null
 
-  n.hotelId = r.hotelId ?? r.hotelsId ?? r.hotels_id ?? r.hotels?.id ?? null
+  // ⚠️ 호텔 식별자/표시값: 말뭉치가 제각각일 수 있으니 전부 흡수
+  n.hotelId =
+    r.hotelId ??
+    r.hotelsId ??
+    r.hotels_id ??
+    r.hotels?.id ??
+    r.hotel?.id ??
+    r.hotel_id ??
+    r.hotelIdRef ??
+    null
 
-  n.hotelName   = r.hotelName ?? r.hotel_name ?? r.hotels?.name ?? n.hotelName
-  n.roomTypeName= r.roomTypeName ?? r.room_type_name ?? n.roomTypeName
+  n.hotelName    = r.hotelName ?? r.hotel_name ?? r.hotels?.name ?? r.hotel?.name ?? n.hotelName
+  n.roomTypeName = r.roomTypeName ?? r.room_type_name ?? n.roomTypeName
 
+  // 금액/통화/숙박
   n.totalAmount = r.totalAmount ?? r.total_amount ?? n.totalAmount
   n.currency    = r.currency ?? n.currency
   n.nights      = r.nights ?? n.nights
   n.guests      = r.guests ?? n.guests
 
+  // 날짜
   n.checkIn     = r.checkIn  ?? r.check_in  ?? n.checkIn
   n.checkOut    = r.checkOut ?? r.check_out ?? n.checkOut
+
+  // 연락
+  n.guestName   = r.guestName ?? r.guest_name ?? n.guestName
+  n.guestPhone  = r.guestPhone ?? r.guest_phone ?? n.guestPhone
 
   return n
 }
@@ -190,7 +198,7 @@ const displayCanceledAt = computed(() => {
   return s.includes('T') ? s.replace('T', ' ').slice(0, 16) : (s || '-')
 })
 
-/* ✅ 체크인/체크아웃 + (N박) 한 줄 표시 */
+/* 체크인/체크아웃 + (N박) */
 const inOutText = computed(() => {
   const ci = fmtDate(row.value?.checkIn)
   const co = fmtDate(row.value?.checkOut)
@@ -199,7 +207,7 @@ const inOutText = computed(() => {
   return range + (nights ? ` (${nights}박)` : '')
 })
 
-/* ---------- 취소 가능 여부(사용자 규칙: 전날 23:59까지) ---------- */
+/* 취소 가능 여부(전날 23:59까지) */
 const canCancel = computed(() => {
   if (!row.value) return false
   if (row.value.status === 'CANCELLED') return false
@@ -213,6 +221,7 @@ const cannotCancelReason = computed(
   () => '체크인 전날 23:59 까지 예약취소가 가능합니다.'
 )
 
+/* ---------- 유틸 ---------- */
 function todayStr () {
   const d = new Date()
   const y = d.getFullYear()
@@ -231,11 +240,71 @@ function normalizeDate (v) {
   }
   return String(v).slice(0, 10)
 }
+function fmtAmount(v, c) {
+  if (v == null) return ''
+  return `${Number(v).toLocaleString('ko-KR')}${c === 'KRW' ? '원' : (c ? ` ${c}` : '')}`
+}
+function fmtDate(d) { return d ?? '' }
+function toKStatus(st) {
+  switch (st) {
+    case 'CONFIRMED': return '확정'
+    case 'CANCELLED': return '취소'
+    case 'PENDING':   return '대기'
+    default:          return st
+  }
+}
+function isIsoDate(s) {
+  if (!s || typeof s !== 'string') return false
+  // YYYY-MM-DD 만 허용 (시각 포함해도 앞 10자만 사용)
+  const d = s.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(new Date(d).getTime())
+}
 
-/* ---------- 취소 다이얼로그 ---------- */
+/* ✅ 호텔 상세 라우트 링크 계산 */
+const hotelLink = computed(() => {
+  const r = row.value
+  if (!r) return null
+
+  const hidRaw =
+    r.hotelId ??
+    r.hotelsId ??
+    r.hotels_id ??
+    r.hotels?.id ??
+    r.hotel?.id ??
+    r.hotel_id ??
+    r.hotelIdRef ??
+    null
+
+  const hid = Number(hidRaw)
+  if (!Number.isFinite(hid) || hid <= 0) return null
+
+  const q = {}
+  if (isIsoDate(r.checkIn))  q.checkIn  = r.checkIn.slice(0, 10)
+  if (isIsoDate(r.checkOut)) q.checkOut = r.checkOut.slice(0, 10)
+  if (r.guests != null)      q.guests   = Number(r.guests)
+
+  return {
+    name: 'hotel-detail',
+    params: { id: hid },
+    // 날짜/인원 쿼리는 있으면 붙이고, 없으면 생략
+    ...(Object.keys(q).length ? { query: q } : {})
+  }
+})
+
+/* 데이터 로드 */
+async function load() {
+  loading.value = true
+  try {
+    const raw = await fetchMyBooking(id)
+    row.value = normalizeBooking(raw)
+  } finally {
+    loading.value = false
+  }
+}
+
+/* 취소 다이얼로그 */
 const cancelOpen = ref(false)
 function openCancel() { cancelOpen.value = true }
-
 async function doCancel({ reason }) {
   if (!row.value) return
   try {
@@ -253,49 +322,6 @@ async function doCancel({ reason }) {
     alert(msg)
   } finally {
     cancelOpen.value = false
-  }
-}
-
-/* ---------- 표시 유틸 ---------- */
-function fmtAmount(v, c) {
-  if (v == null) return ''
-  return `${Number(v).toLocaleString('ko-KR')}${c === 'KRW' ? '원' : (c ? ` ${c}` : '')}`
-}
-function fmtDate(d) { return d ?? '' }
-function toKStatus(st) {
-  switch (st) {
-    case 'CONFIRMED': return '확정'
-    case 'CANCELLED': return '취소'
-    case 'PENDING':   return '대기'
-    default:          return st
-  }
-}
-
-/* 호텔 상세 */
-function goHotelDetail(r) {
-  if (!r) return
-  const hid =
-    r.hotelId ?? r.hotelsId ?? r.hotels_id ?? r.hotels?.id ?? r.hotelsIdRef ?? null
-  if (!hid) {
-    console.warn('[예약상세] 호텔 ID 없음', r)
-    return
-  }
-  const query = {
-    ...(r.checkIn ? { checkIn: r.checkIn } : {}),
-    ...(r.checkOut ? { checkOut: r.checkOut } : {}),
-    ...(r.guests ? { adults: String(r.guests) } : {}),
-  }
-  router.push({ path: `/hotels/${hid}`, query })
-}
-
-/* 데이터 로드 */
-async function load() {
-  loading.value = true
-  try {
-    const raw = await fetchMyBooking(id)
-    row.value = normalizeBooking(raw)
-  } finally {
-    loading.value = false
   }
 }
 

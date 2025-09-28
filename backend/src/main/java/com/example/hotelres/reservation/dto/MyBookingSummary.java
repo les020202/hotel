@@ -5,6 +5,7 @@ import java.time.LocalDate;
 public record MyBookingSummary(
         Long      bookingId,
         String    status,
+        Long      hotelId, 
         String    hotelName,
         String    roomTypeName,
         LocalDate checkIn,
