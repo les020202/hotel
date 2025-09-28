@@ -64,10 +64,17 @@ public class AdminHotelService {
         }
 
         // 2) 자식 테이블 정리 (참조 순서 주의)
-        jdbc.update("DELETE FROM booking_day  WHERE hotel_id=?", id);
-        jdbc.update("DELETE FROM rate_plans   WHERE hotel_id=?", id);
-        jdbc.update("DELETE FROM room_types   WHERE hotel_id=?", id);
-        jdbc.update("DELETE FROM hotel_owners WHERE hotel_id=?", id);
+        jdbc.update("DELETE FROM booking_day      WHERE hotel_id=?", id); // booking_day -> room_types/hotel
+        jdbc.update("""
+            DELETE r
+                FROM rooms r
+                JOIN room_types rt ON rt.id = r.room_type_id
+                WHERE rt.hotel_id = ?
+        """, id);                                                          // rooms -> room_types
+        jdbc.update("DELETE FROM room_types       WHERE hotel_id=?", id);   // room_types -> hotel
+        jdbc.update("DELETE FROM rate_plans       WHERE hotel_id=?", id);   // rate_plans -> hotel
+        jdbc.update("DELETE FROM hotel_amenities  WHERE hotel_id=?", id);   // amenities -> hotel (있으면)
+        jdbc.update("DELETE FROM hotel_owners     WHERE hotel_id=?", id);   // owners -> hotel
 
         // 3) 마지막으로 호텔 삭제
         try {

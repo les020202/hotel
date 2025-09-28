@@ -5,6 +5,7 @@ import java.sql.Types;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.SqlOutParameter;
+import org.springframework.jdbc.core.SqlParameter;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.simple.SimpleJdbcCall;
 import org.springframework.stereotype.Repository;
@@ -23,22 +24,24 @@ public class HotelApplicationAuditRepository {
         this.jdbc = jdbc;
     }
 
+    
     @PostConstruct
     void init() {
-        // 현재 연결된 스키마에 있는 프로시저 명
-        this.approveCall = new SimpleJdbcCall(jdbc)
-                .withProcedureName("approve_hotel_application")
-                .declareParameters(
-                        // OUT 파라미터 이름은 프로시저 정의와 동일해야 함
-                        new SqlOutParameter("o_hotel_id", Types.BIGINT)
-                );
+    this.approveCall = new SimpleJdbcCall(jdbc)
+        .withCatalogName("hotelres")                 
+        .withProcedureName("approve_hotel_application")
+        .withoutProcedureColumnMetaDataAccess()
+        .declareParameters(
+            new SqlParameter("p_application_id", Types.BIGINT),
+            new SqlParameter("p_admin_id", Types.BIGINT),
+            new SqlOutParameter("o_hotel_id", Types.BIGINT)
+        );
     }
 
-    /** 승인 프로시저 호출 -> 생성/연결된 hotelId 반환 */
     public long callApproveProcedure(long applicationId, long adminId) {
         MapSqlParameterSource in = new MapSqlParameterSource()
-                .addValue("p_application_id", applicationId)
-                .addValue("p_admin_id", adminId);
+            .addValue("p_application_id", applicationId)
+            .addValue("p_admin_id", adminId);
         var out = approveCall.execute(in);
         Object v = out.get("o_hotel_id");
         if (v == null) throw new IllegalStateException("approve_hotel_application returned null hotelId");
