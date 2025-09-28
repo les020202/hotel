@@ -59,7 +59,13 @@ watch(() => route.params.hotelId, v => { hotelId.value = Number(v); loadArrivals
 
 <template>
   <div>
-    <h1 class="text-xl font-bold">호실 배정</h1>
+    <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">호실 배정</h1></div>
+      <div class="actions">
+        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
+        <button class="btn" @click="logout">로그아웃</button>
+      </div>
+    </header>
 
     <div class="mt-4 flex gap-3 items-end">
       <div>
@@ -124,3 +130,21 @@ watch(() => route.params.hotelId, v => { hotelId.value = Number(v); loadArrivals
     </div>
   </div>
 </template>
+
+<style>
+/* 상단 바 */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.title { font-weight: 800; font-size: 18px; }
+.actions { display: flex; gap: 12px; }
+.btn.ghost {
+  background: transparent;
+  color: #1f2937;
+  padding: 0;
+  border-radius: 0;
+}
+</style>

@@ -194,7 +194,14 @@ watch([roomTypeId, () => range.from, () => range.to], async () => {
 
 <template>
   <div>
-    <h1 class="text-xl font-bold">재고 캘린더</h1>
+    <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">재고 캘린더</h1></div>
+      <div class="actions">
+        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
+        <button class="btn" @click="logout">로그아웃</button>
+      </div>
+    </header>
+
 
     <!-- 필터 -->
     <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">

@@ -1,7 +1,13 @@
 <template>
   <div class="space-y-4">
+    <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">리뷰 조회</h1></div>
+      <div class="actions">
+        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
+        <button class="btn" @click="logout">로그아웃</button>
+      </div>
+    </header>
     <header class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">리뷰 조회</h2>
       <div class="text-xs text-gray-500">
         호텔 ID: <strong>{{ hotelId }}</strong>
       </div>
@@ -180,4 +186,12 @@ async function submitReport({ reasonCode, detail }) {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.title { font-weight: 800; font-size: 18px; }
+.actions { display: flex; gap: 12px; }
 </style>
