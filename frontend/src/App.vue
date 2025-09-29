@@ -40,4 +40,5 @@ const pageAria = computed(() => {
   if (p.startsWith('/find-password')) return '비밀번호 찾기'
   return '콘텐츠'
 })
+
 </script>

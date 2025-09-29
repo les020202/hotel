@@ -6,7 +6,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.example.hotelres.settlement.CutoffNotReachedException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -55,4 +58,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR) // 500
                 .body(Map.of("error", "서버 오류: " + e.getClass().getSimpleName()));
     }
-}
+   
+
+        @ExceptionHandler(CutoffNotReachedException.class)
+        @ResponseStatus(HttpStatus.CONFLICT)
+        public Map<String, Object> handleCutoffException(CutoffNotReachedException ex) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("message", ex.getMessage());  // ✅ 메시지만 내려주기
+            return body;
+        }
+    }
+
+

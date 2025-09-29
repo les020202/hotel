@@ -43,7 +43,7 @@ public class HotelPayoutLookupRepository {
 
         return Optional.of(new HotelPayoutViewImpl(bankCode, accountNo, holderName));
     }
-
+    
     /** 간단한 내부 구현체 */
     private record HotelPayoutViewImpl(
             String payoutBankCode,

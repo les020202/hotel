@@ -10,3 +10,4 @@ public record HotelSummaryDTO(
     long feeSum,
     long netSum
 ) {}
+

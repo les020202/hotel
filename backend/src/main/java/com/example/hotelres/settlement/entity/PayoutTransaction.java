@@ -23,7 +23,7 @@ public class PayoutTransaction {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable=false)
-    private PayoutStatus status;  // PENDING, DONE, FAILED
+    private PayoutStatus status;  // 
 
     @Column(name="requested_at", nullable=false)
     private LocalDateTime requestedAt;

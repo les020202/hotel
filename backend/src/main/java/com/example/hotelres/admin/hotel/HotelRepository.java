@@ -25,4 +25,13 @@ public interface HotelRepository extends JpaRepository<Hotel, Long> {
     
     @Query("select h.id from Hotel h")
     List<Long> findAllHotelIds();
+    List<Hotel> findByNameContainingIgnoreCase(String name);
+    
+    
+    @Query("""
+    		  select h from Hotel h
+    		  where replace(lower(h.name), ' ', '') like lower(concat('%', replace(:name, ' ', ''), '%'))
+    		""")
+    		List<Hotel> findByNameContainingIgnoreCaseIgnoringSpaces(@Param("name") String name);
+
 }

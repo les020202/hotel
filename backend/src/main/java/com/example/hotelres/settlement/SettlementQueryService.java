@@ -1,17 +1,26 @@
 // src/main/java/com/example/hotelres/settlement/SettlementQueryService.java
 package com.example.hotelres.settlement;
 
-import com.example.hotelres.settlement.dto.HotelSummaryDTO;
-import com.example.hotelres.settlement.dto.SettlementLineDTO;
-import com.example.hotelres.settlement.repo.SettlementCalcRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Objects;
+import com.example.hotelres.admin.hotel.Hotel;
+import com.example.hotelres.admin.hotel.HotelRepository;
+import com.example.hotelres.payment.PaymentRepository;
+import com.example.hotelres.settlement.dto.HotelSearchDTO;
+import com.example.hotelres.settlement.dto.HotelSummaryDTO;
+import com.example.hotelres.settlement.dto.SettlementLineDTO;
+import com.example.hotelres.settlement.repo.SettlementCalcRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +29,43 @@ import java.util.Objects;
 public class SettlementQueryService {
 
   private final SettlementCalcRepository calcRepo;
+  private final HotelRepository hotelRepository;   // ✅ 호텔 검색용
+
+  private final PaymentRepository paymentRepo;
+  private final HotelRepository hotelRepo;
+
+  /**
+   * 온라인 결제만 대상으로, 컷오프(다음 주 수요일 00:05) 이전 "승인/생성"분을 집계하여
+   * 호텔 수수료율(settlement_fee_pct)을 적용한 Net(지급액)을 계산한다.
+   *
+   * Gross = SUM(payments.amount) where bookings.check_out in [start, end]
+   *         and COALESCE(approved_at, created_at) <= cutoff
+   * Fee   = ROUND(Gross * feePct)
+   * Net   = Gross - Fee
+   */
+  public long computePayableAmountBeforeCutoffOnlineOnly(
+          Long hotelId, LocalDate start, LocalDate end, LocalDateTime cutoff) {
+
+      Long grossL = paymentRepo.sumApprovedAmountBeforeCutoff(hotelId, start, end, cutoff);
+      long gross = (grossL != null) ? grossL : 0L;
+
+      // 호텔 수수료율 (없으면 0.1500 기본)
+      BigDecimal feePct = hotelRepo.findById(hotelId)
+              .map(Hotel::getSettlementFeePct)
+              .orElse(new BigDecimal("0.1500"));
+
+      long fee = new BigDecimal(gross)
+              .multiply(feePct)
+              .setScale(0, RoundingMode.HALF_UP)
+              .longValue();
+
+      long net = Math.max(gross - fee, 0L);
+
+      log.info("[Settlement][Query] hotel={}, period={}~{}, cutoff={}, gross={}, feePct={}, fee={}, net={}",
+              hotelId, start, end, cutoff, gross, feePct, fee, net);
+
+      return net;
+  }
 
   /** 라인 상세(호텔/객실타입 옵션, 기간 필수) */
   public List<SettlementLineDTO> lines(Long hotelId, Long roomTypeId, LocalDate start, LocalDate end) {
@@ -59,6 +105,12 @@ public class SettlementQueryService {
     return total;
   }
 
+  /** 호텔 검색 (자동완성) */
+  public List<HotelSearchDTO> searchHotels(String keyword) {
+	    return hotelRepository.findByNameContainingIgnoreCaseIgnoringSpaces(keyword).stream()
+	        .map(h -> new HotelSearchDTO(h.getId(), h.getName()))
+	        .toList();
+	}
   /* -------------------- 내부 헬퍼 -------------------- */
 
   private void validatePeriod(LocalDate start, LocalDate end) {

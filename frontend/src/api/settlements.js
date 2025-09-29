@@ -1,52 +1,38 @@
 // src/api/settlements.js
-import { api } from '@/router'
+import api from './auth'
 
-// 빈 값은 제외하고 쿼리스트링 생성
-const qs = (obj = {}) =>
-  new URLSearchParams(
-    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== '')
-  ).toString()
-
-/** 호텔별 요약 */
+// 요약
 export const fetchSummaryByHotel = (params) =>
-  api(`/api/settlements/summary?${qs(params)}`).then(r => r.json())
+  api.get('/settlements/summary', { params }).then(r => r.data)
 
-/** 라인(상세) */
+// 상세
 export const fetchSettlementItems = (params) =>
-  api(`/api/settlements/items?${qs(params)}`).then(r => r.json())
+  api.get('/settlements/items', { params }).then(r => r.data)
 
-/** 정산서 목록 (hotelId 없어도, status 필터 가능) */
+// 정산서 목록
 export const fetchStatements = (params) =>
-  api(`/api/settlements/statements?${qs(params)}`).then(r => r.json())
+  api.get('/settlements/statements', { params }).then(r => r.data)
 
-/** 완료된 정산서 목록(통일: /statements?status=SETTLED 사용) */
+// 완료된 정산서 목록
 export const fetchSettledStatements = (params) =>
-  api(`/api/settlements/statements?${qs({ ...params, status: 'SETTLED' })}`).then(r => r.json())
+  api.get('/settlements/statements', { params: { ...params, status: 'SETTLED' } }).then(r => r.data)
 
-/** 주간 정산서 생성 */
+// 주간 생성
 export const generateSettlement = (payload) =>
-  api('/api/settlements/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(r => r.json())
+  api.post('/settlements/generate', payload).then(r => r.data)
 
-/** 월 전체 주차 생성 */
+// 월간 생성 (RequestParam 방식)
 export const generateMonth = (payload) =>
-  api(`/api/settlements/generate-month?${qs({
-    hotelId: payload.hotelId,
-    month: payload.month,
-    bankCode: payload.bankCode,
-    accountNo: payload.accountNo,
-    holderName: payload.holderName,
-  })}`, {
-    method: 'POST',
-  }).then(r => r.json())
+  api.post('/settlements/generate-month', null, { params: payload }).then(r => r.data)
 
-/** 데모 주간 생성 */
+// 데모 주간 생성
 export const generateDemoWeekly = () =>
-  api('/api/settlements/generate-demo-weekly', { method: 'POST' }).then(r => r.json())
+  api.post('/settlements/generate-demo-weekly').then(r => r.data)
 
-/** 정산 확정 */
+// 정산 확정 (void → 성공 여부만 반환)
 export const settleStatement = (id) =>
-  api(`/api/settlements/${id}/settle`, { method: 'POST' }).then(r => r.ok)
+  api.post(`/settlements/${id}/settle`).then(() => true)
+
+// 호텔 검색
+export const searchHotels = (keyword) =>
+  api.get('/hotels/search', { params: { q: keyword } }).then(r => r.data)
