@@ -2,10 +2,6 @@
   <div class="space-y-4">
     <header class="topbar">
       <div class="title"><h1 class="text-xl font-bold">리뷰 조회</h1></div>
-      <div class="actions">
-        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
-        <button class="btn" @click="logout">로그아웃</button>
-      </div>
     </header>
     <header class="flex items-center justify-between">
       <div class="text-xs text-gray-500">

@@ -3,10 +3,6 @@
   <div class="p-4 space-y-4">
       <header class="topbar">
       <div class="title"><h1 class="text-xl font-bold">내 호텔 예약 내역</h1></div>
-      <div class="actions">
-        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
-        <button class="btn" @click="logout">로그아웃</button>
-      </div>
     </header>
 
     <!-- [ADD] 검색/필터 바 -->

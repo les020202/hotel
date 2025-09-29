@@ -102,4 +102,36 @@ public class OwnerSalesRepository {
       .setParameter("endDt", endDt)
       .getResultList();
   }
+
+  /** 추가: 임의 구간(start~end '포함')을 일별로 그대로 반환 */
+  public List<Object[]> dailyByRange(Long hotelId, LocalDate startInclusive, LocalDate endInclusive) {
+    return em.createNativeQuery("""
+        WITH RECURSIVE
+        days AS (
+          SELECT DATE(:startD) AS d
+          UNION ALL
+          SELECT d + INTERVAL 1 DAY FROM days
+          WHERE d < DATE(:endD)
+        ),
+        sales AS (
+          SELECT DATE(p.approved_at) AS d, SUM(p.amount) AS amt
+          FROM payments p
+          JOIN bookings b ON b.id = p.booking_id
+          WHERE b.hotel_id = :hid
+            AND p.status   = 'SUCCEEDED'
+            AND p.currency = 'KRW'
+            AND p.approved_at >= DATE(:startD)
+            AND p.approved_at <  DATE(:endD) + INTERVAL 1 DAY  -- end 포함
+          GROUP BY DATE(p.approved_at)
+        )
+        SELECT days.d AS day, COALESCE(s.amt,0) AS amount
+        FROM days
+        LEFT JOIN sales s ON s.d = days.d
+        ORDER BY days.d
+        """)
+      .setParameter("hid", hotelId)
+      .setParameter("startD", startInclusive)
+      .setParameter("endD", endInclusive)
+      .getResultList();
+  }
 }

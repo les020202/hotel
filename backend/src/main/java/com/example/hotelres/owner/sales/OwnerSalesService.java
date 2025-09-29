@@ -22,6 +22,12 @@ public class OwnerSalesService {
   public SalesSeriesResponse getSeries(Long hotelId, String mode, LocalDate start, LocalDate end) {
     String m = normalize(mode);
 
+    // 추가: week 모드에서 start와 end가 같이 들어오면, 해당 구간을 '일별'로 정확히 집계
+    if ("week".equals(m) && start != null && end != null) {
+      List<Object[]> rawByRange = repo.dailyByRange(hotelId, start, end);
+      return toResponse("week", rawByRange, start, end);
+    }
+
     if ("week".equals(m)) {
       LocalDate monday = (start != null) ? toMonday(start) : currentMonday();
       List<Object[]> raw = repo.weekByDay(hotelId, monday); // 항상 7행
@@ -35,6 +41,12 @@ public class OwnerSalesService {
                                          : LocalDate.now().plusMonths(1).withDayOfMonth(1);
     List<Object[]> raw = repo.monthSeries(hotelId, startMonth, endMonthEx);
     return toResponse("month", raw, startMonth, endMonthEx.minusDays(1));
+  }
+
+  // 추가: /daily 전용 – 임의 구간(start~end 포함)을 '일별'로 그대로 반환
+  public SalesSeriesResponse getDailyRangeSeries(Long hotelId, LocalDate start, LocalDate end) {
+    List<Object[]> raw = repo.dailyByRange(hotelId, start, end);
+    return toResponse("daily", raw, start, end);
   }
 
   // 'day'로 들어오면 week로 우회

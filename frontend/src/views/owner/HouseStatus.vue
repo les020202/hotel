@@ -54,11 +54,8 @@ onMounted(load)
 
 <template>
   <div class="space-y-4">
-    <header class="topbar">
-
-
     <div class="flex items-center gap-3">
-      <div class="title"><h1 class="text-xl font-bold">리뷰 조회</h1></div>
+      <div class="title"><h1 class="text-xl font-bold">객실 현황</h1></div>
       <input type="date" v-model="date" class="border rounded-lg px-3 py-2" @change="load" />
       <select v-model="floor" class="border rounded-lg px-3 py-2">
         <option value="">전체 층</option>
@@ -71,12 +68,8 @@ onMounted(load)
         <span class="inline-flex items-center gap-1"><span class="w-3 h-3 bg-gray-400 inline-block rounded-sm"></span> 수리중</span>
         <span class="inline-flex items-center gap-1"><span class="w-3 h-3 bg-green-400 inline-block rounded-sm"></span> 가용</span>
       </div>
-      <div class="actions">
-        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
-        <button class="btn" @click="logout">로그아웃</button>
-      </div>
     </div>
-    </header>
+
 
     <!-- 카드 그리드 -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">

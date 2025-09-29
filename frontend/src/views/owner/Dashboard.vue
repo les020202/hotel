@@ -1,57 +1,120 @@
 <script setup lang="js">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { onActivated, onBeforeUnmount, nextTick, watchEffect } from 'vue'
 
 import RoomTypeOccupancyChart from '@/components/owner_graph/RoomTypeOccupancyChart.vue'
 import { api } from '@/lib/api'
 
-const route = useRoute()
-const router = useRouter()
-
 /* 정산 수수료율(15%) */
 const PLATFORM_FEE_RATE = 0.15
+
+const route = useRoute()
+const router = useRouter()
 
 const hotelId = ref(null)
 const myHotels = ref([])
 const currentHotel = computed(() => myHotels.value.find(h => h.id === hotelId.value))
 
-async function loadHotels() {
+async function loadHotels () {
   const res = await api('/api/owner/hotels')
-  if (res.ok) {
-    myHotels.value = await res.json()
-  }
+  if (res.ok) myHotels.value = await res.json()
 }
 
-const logout = () => {
-  localStorage.removeItem('token')
-  document.cookie = 'refreshToken=; Max-Age=0; path=/;'
-  router.push('/login')
-}
-
-/* 오늘 잔여 객실 상태 */
+/* =========================
+   KPI 상태
+========================= */
 const todayRemaining = ref(null)
 const loadingRemain = ref(false)
 
-/* 이번 주 예약 수 상태 */
 const weeklyCount = ref(null)
 const loadingWeekly = ref(false)
 
-/* 오늘 체크인 수 상태 */
 const todayCheckIn = ref(null)
 const loadingTodayCheckIn = ref(false)
 const nowCheckIn = ref(null)
 const loadingNow = ref(false)
 
-/* 이번주 정산 예정 금액 (15% 차감 후 합산) */
 const settlementThisWeek = ref(null)
 const loadingSettlement = ref(false)
 
-/* 주/월 평균 매출 (선택: API 또는 salesData 기반) */
 const avgWeekSales = ref(null)
 const avgMonthSales = ref(null)
 const loadingAvgSales = ref(false)
 
-/* 오늘 잔여 객실 로드 */
+/* =========================
+   매출 차트
+========================= */
+const salesMode = ref('week')   // 'week' | 'month'
+const salesData = ref([])
+const salesLoading = ref(false)
+const salesErr = ref('')
+const salesAnchor = ref(new Date())
+
+const fixedWeeklyAvgSales  = ref(null) // 금주 일별 평균(월~일)
+const fixedMonthlyAvgSales = ref(null) // 이달 주 평균(월~일)
+
+/* =========================
+   날짜 유틸
+========================= */
+const pad2 = (n) => String(n).padStart(2, '0')
+const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`
+const mondayOf = (d) => {
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const day = t.getDay() || 7
+  if (day !== 1) t.setDate(t.getDate() - (day - 1))
+  return t
+}
+const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1)
+const monthEnd   = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0)
+function weekRangeOf(anchorDate) {
+  const start = mondayOf(anchorDate)
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
+  return { start, end }
+}
+function toDate(v) {
+  if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate())
+  if (typeof v !== 'string') return null
+  const s = v.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00')
+  const s2 = s.replace(/[./]/g, '-')
+  if (/^\d{4}-\d{2}-\d{2}/.test(s2)) return new Date(s2.split(' ')[0] + 'T00:00:00')
+  const d = new Date(s)
+  return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+/* 다음 버튼 비활성화 판단 */
+const canNext = computed(() => {
+  if (salesMode.value === 'week') {
+    return mondayOf(salesAnchor.value) < mondayOf(new Date())
+  } else {
+    return monthStart(salesAnchor.value) < monthStart(new Date())
+  }
+})
+function shiftPrev () {
+  const dt = new Date(salesAnchor.value)
+  if (salesMode.value === 'week') dt.setDate(dt.getDate() - 7)
+  else dt.setMonth(dt.getMonth() - 1)
+  salesAnchor.value = dt
+  loadSales()
+}
+function shiftNext () {
+  if (!canNext.value) return
+  const dt = new Date(salesAnchor.value)
+  if (salesMode.value === 'week') dt.setDate(dt.getDate() + 7)
+  else dt.setMonth(dt.getMonth() + 1)
+  salesAnchor.value = dt
+  loadSales()
+}
+watch(salesMode, () => {
+  salesAnchor.value = new Date()
+  loadSales()
+  recomputeAvgWeekWithinMonthUsingSalesData()
+})
+
+/* =========================
+   KPI 로더
+========================= */
 async function loadTodayRemaining () {
   if (!hotelId.value) return
   loadingRemain.value = true
@@ -60,42 +123,67 @@ async function loadTodayRemaining () {
     if (res.ok) {
       const data = await res.json()
       todayRemaining.value =
-        typeof data === 'number'
-          ? data
-          : (data.totalRemainingQty ?? data.total ?? data.value ?? null)
-    } else {
-      todayRemaining.value = null
-    }
-  } catch {
-    todayRemaining.value = null
-  } finally {
-    loadingRemain.value = false
-  }
+        typeof data === 'number' ? data : (data.totalRemainingQty ?? data.total ?? data.value ?? null)
+    } else todayRemaining.value = null
+  } catch { todayRemaining.value = null }
+  finally { loadingRemain.value = false }
 }
 
-/* 이번 주 예약 수 로더 (원래 있던 함수: 그대로 둠) */
+/** ✅ 이번 주(월~일)만 정확하게 세는 단일 함수 */
 async function loadWeeklyCount () {
   if (!hotelId.value) return
   loadingWeekly.value = true
   try {
-    const res = await api(`/api/owner/hotels/${hotelId.value}/bookings/weekly-count`)
+    const { start, end } = weekRangeOf(new Date())
+    const from = fmtYMD(start)
+    const to   = fmtYMD(end)
+
+    // 먼저 0으로 보여주기(월요일에 누적처럼 보이는 현상 방지)
+    weeklyCount.value = 0
+
+    // 1) 기간 예약 목록 → 프론트에서 직접 범위 필터 + 개수
+    let res = await api(`/api/owner/hotels/${hotelId.value}/bookings?from=${from}&to=${to}`)
+    if (res.ok) {
+      const list = await res.json()
+      if (Array.isArray(list)) {
+        const startT = new Date(from + 'T00:00:00').getTime()
+        const endT   = new Date(to   + 'T23:59:59').getTime()
+        const cnt = list.filter(it => {
+          const s = it.checkIn ?? it.check_in ?? it.stayDate ?? it.stay_date
+          if (!s) return false
+          const d = new Date(String(s).replace(/[./]/g,'-').split(' ')[0] + 'T12:00:00')
+          const t = d.getTime()
+          return Number.isFinite(t) && t >= startT && t <= endT
+        }).length
+        weeklyCount.value = cnt
+        return
+      }
+    }
+
+    // 2) 일별 카운트 합산(서버가 있으면)
+    res = await api(`/api/owner/hotels/${hotelId.value}/bookings/daily?from=${from}&to=${to}`)
     if (res.ok) {
       const data = await res.json()
-      weeklyCount.value =
-        typeof data === 'number'
-          ? data
-          : (data.weeklyCount ?? data.count ?? null)
+      const arr = Array.isArray(data) ? data : (data.items ?? [])
+      const sum = arr.reduce((a, it) => a + Number(it.count ?? it.value ?? 0), 0)
+      if (Number.isFinite(sum)) { weeklyCount.value = sum; return }
+    }
+
+    // 3) 폴백: 서버 weekly-count (기준 다를 수 있음)
+    res = await api(`/api/owner/hotels/${hotelId.value}/bookings/weekly-count`)
+    if (res.ok) {
+      const data = await res.json()
+      weeklyCount.value = typeof data === 'number' ? data : (data.weeklyCount ?? data.count ?? 0)
     } else {
-      weeklyCount.value = null
+      weeklyCount.value = 0
     }
   } catch {
-    weeklyCount.value = null
+    weeklyCount.value = 0
   } finally {
     loadingWeekly.value = false
   }
 }
 
-/* 오늘 체크인 상태 로더 */
 async function loadTodayCheckIn () {
   if (!hotelId.value) return
   loadingTodayCheckIn.value = true
@@ -104,19 +192,11 @@ async function loadTodayCheckIn () {
     if (res.ok) {
       const data = await res.json()
       todayCheckIn.value =
-        typeof data === 'number'
-          ? data
-          : (data.todayCheckInCount ?? data.count ?? null)
-    } else {
-      todayCheckIn.value = null
-    }
-  } catch {
-    todayCheckIn.value = null
-  } finally {
-    loadingTodayCheckIn.value = false
-  }
+        typeof data === 'number' ? data : (data.todayCheckInCount ?? data.count ?? null)
+    } else todayCheckIn.value = null
+  } catch { todayCheckIn.value = null }
+  finally { loadingTodayCheckIn.value = false }
 }
-
 async function loadNowCheckIn () {
   if (!hotelId.value) return
   loadingNow.value = true
@@ -125,138 +205,96 @@ async function loadNowCheckIn () {
     if (res.ok) {
       const data = await res.json()
       nowCheckIn.value =
-        typeof data === 'number'
-          ? data
-          : (data.nowCheckInCount ?? data.count ?? null)
-    } else {
-      nowCheckIn.value = null
-    }
+        typeof data === 'number' ? data : (data.nowCheckInCount ?? data.count ?? null)
+    } else nowCheckIn.value = null
+  } catch { nowCheckIn.value = null }
+  finally { loadingNow.value = false }
+}
+
+// “한 달 안에서 주 평균(월~일)”을 salesData 기준으로 다시 계산해 avgWeekSales에 반영
+function recomputeAvgWeekWithinMonthUsingSalesData () {
+  // 월 모드일 때만 동작
+  if (salesMode.value !== 'month') return
+
+  const avg = computeMonthlyWeeklyAverageFromDaily(salesData.value, salesAnchor.value)
+  // 계산 성공 시에만 덮어씀 (null이면 기존 값 유지)
+  if (avg != null) {
+    avgWeekSales.value = avg
+  }
+}
+
+/* 이번주 정산 예정 금액 (각 결제 15% 차감 후 합산) */
+let _settlementLock = false
+async function loadSettlementThisWeek () {
+  if (!hotelId.value || _settlementLock) return
+  _settlementLock = true
+  loadingSettlement.value = true
+  try {
+    const { start, end } = weekRangeOf(new Date())
+    const url = `/api/owner/hotels/${hotelId.value}/sales?mode=week&start=${fmtYMD(start)}&end=${fmtYMD(end)}`
+    const res = await api(url)
+    if (!res.ok) throw new Error(await res.text())
+    const raw = await res.json()
+    const items = Array.isArray(raw) ? raw : (raw.items ?? [])
+    const gross = items.reduce((s, it) =>
+      s + Number(it.amount ?? it.totalAmount ?? it.total ?? it.value ?? 0), 0)
+    settlementThisWeek.value = Math.round(gross * (1 - PLATFORM_FEE_RATE))
   } catch {
-    nowCheckIn.value = null
+    settlementThisWeek.value = 0
   } finally {
-    loadingNow.value = false
+    loadingSettlement.value = false
+    _settlementLock = false
   }
 }
 
-/* --------------------------- */
-/* [Sales Chart] 매출 차트     */
-/* --------------------------- */
-const salesMode = ref('week')        // 'week' | 'month'
-const salesData = ref([])            // [{ label: string, amount: number }]
-const salesLoading = ref(false)
-const salesErr = ref('')
-
-/* 주/월 이동용 앵커 날짜 (기본: 오늘) */
-const salesAnchor = ref(new Date())
-
-/* 날짜 유틸 */
-const pad2 = (n) => String(n).padStart(2, '0')
-const fmtYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`
-const mondayOf = (d) => {
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const day = t.getDay() || 7 // Sun=0 → 7
-  if (day !== 1) t.setDate(t.getDate() - (day - 1))
-  return t
-}
-const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1)
-const isSameYMD = (a,b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate()
-
-/* [ADD] 달 말일, 파서, 주 범위(월~일) 유틸 */
-const monthEnd = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0)
-const parseYMD = (s) => {
-  if (!s || typeof s !== 'string') return null
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!m) return null
-  const y = Number(m[1]), mm = Number(m[2]) - 1, dd = Number(m[3])
-  const dt = new Date(y, mm, dd)
-  return isNaN(dt.getTime()) ? null : dt
-}
-/* 월요일 시작~일요일 끝 주 범위 */
-function weekRangeOf(anchorDate) {
-  const start = mondayOf(anchorDate)
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
-  return { start, end }
-}
-
-/* 현재 주/월 여부 체크 → 앞으로 버튼 비활성화 */
-const canNext = computed(() => {
-  if (salesMode.value === 'week') {
-    const cur = mondayOf(new Date())
-    const anchor = mondayOf(salesAnchor.value)
-    return anchor < cur
-  } else {
-    const curM = monthStart(new Date())
-    const anchorM = monthStart(salesAnchor.value)
-    return anchorM < curM
-  }
-})
-
-/* 이전/다음 기간 이동 */
-function shiftPrev () {
-  const dt = new Date(salesAnchor.value)
-  if (salesMode.value === 'week') {
-    dt.setDate(dt.getDate() - 7)
-  } else {
-    dt.setMonth(dt.getMonth() - 1)
-  }
-  salesAnchor.value = dt
-  loadSales()
-}
-function shiftNext () {
-  if (!canNext.value) return
-  const dt = new Date(salesAnchor.value)
-  if (salesMode.value === 'week') {
-    dt.setDate(dt.getDate() + 7)
-  } else {
-    dt.setMonth(dt.getMonth() + 1)
-  }
-  salesAnchor.value = dt
-  loadSales()
-}
-
-/* 모드 바꾸면 앵커를 현재로 리셋 */
-watch(salesMode, () => {
-  salesAnchor.value = new Date()
-  loadSales()
-  recomputeAvgWeekWithinMonthUsingSalesData()
-})
-
+/* =========================
+   매출 로더 & 보조 계산
+========================= */
 async function loadSales () {
   if (!hotelId.value) return
+
+  if (salesMode.value === 'week') {
+    const curMon = mondayOf(new Date())
+    const anchorMon = mondayOf(salesAnchor.value)
+    if (anchorMon > curMon) salesAnchor.value = new Date()
+  }
+
   salesLoading.value = true
   salesErr.value = ''
   try {
     let url = `/api/owner/hotels/${hotelId.value}/sales?mode=${salesMode.value}`
-
     if (salesMode.value === 'week') {
-      const { start, end } = weekRangeOf(salesAnchor.value) // 월~일 범위 강제
-      const startStr = fmtYMD(start)
-      const endStr = fmtYMD(end)
-      url += `&start=${startStr}&end=${endStr}`
+      const { start, end } = weekRangeOf(salesAnchor.value)
+      url += `&start=${fmtYMD(start)}&end=${fmtYMD(end)}`
     } else {
       const start = fmtYMD(monthStart(salesAnchor.value))
-      url += `&start=${start}&end=${start}` // 서버가 +1개월 처리 가정
+      url += `&start=${start}&end=${start}`
     }
 
     const res = await api(url)
+    if (res.status === 204) { salesData.value = []; return }
     if (!res.ok) throw new Error(await res.text())
+
     const raw = await res.json()
-    const array = Array.isArray(raw) ? raw : (raw?.items ?? [])
+    const array = Array.isArray(raw) ? raw : (raw.items ?? [])
     salesData.value = array.map(it => ({
-      label: it.label ?? it.date ?? it.key ?? '',
-      amount: Number(it.amount ?? it.total ?? it.value ?? 0)
-    }))
+      label: it.label ?? it.date ?? it.day ?? it.d ?? it.key ?? it.stay_date ?? '',
+      amount: Number(it.amount ?? it.totalAmount ?? it.total ?? it.revenue ?? it.value ?? 0)
+    })).filter(it => it.label)
+
+    try { salesData.value.sort((a, b) => a.label.localeCompare(b.label)) } catch {}
   } catch (e) {
     salesErr.value = e?.message || '불러오기 실패'
     salesData.value = []
   } finally {
     salesLoading.value = false
     tryComputeAvgFromSales()
-    recomputeAvgWeekWithinMonthUsingSalesData()
+    if (typeof recomputeAvgWeekWithinMonthUsingSalesData === 'function') {
+      recomputeAvgWeekWithinMonthUsingSalesData()
+    }
   }
 }
 
-/* 간단 SVG 라인차트 계산 유틸 */
 const chartViewport = { w: 640, h: 220, pad: 24 }
 const salesMax = computed(() => {
   const max = Math.max(0, ...salesData.value.map(d => d.amount))
@@ -291,197 +329,184 @@ const salesTicks = computed(() => {
   }))
 })
 
-/* 숫자 → KRW 포맷 */
 const fmtKRW = (v) => new Intl.NumberFormat('ko-KR').format(Math.round(v ?? 0))
 
-/* 평균값 Fallback: salesData에서 간단 평균 계산 (모드별 일반 평균) */
 function tryComputeAvgFromSales () {
   const arr = salesData.value
   if (!arr?.length) return
   const sum = arr.reduce((a, b) => a + (Number(b.amount) || 0), 0)
   const avg = Math.round(sum / arr.length)
-  if (salesMode.value === 'week' && avgWeekSales.value == null) avgWeekSales.value = avg
+  if (salesMode.value === 'week'  && avgWeekSales.value  == null) avgWeekSales.value  = avg
   if (salesMode.value === 'month' && avgMonthSales.value == null) avgMonthSales.value = avg
 }
 
-/* [ADD] “한 달 안에서 주 평균” 계산 */
 function computeMonthlyWeeklyAverageFromDaily(dailyItems, anchorDate) {
   if (!dailyItems?.length || !anchorDate) return null
   const mStart = monthStart(anchorDate)
-  const mEnd = monthEnd(anchorDate)
+  const mEnd   = monthEnd(anchorDate)
 
   const dayAmount = new Map()
   for (const it of dailyItems) {
-    const d = parseYMD(it.label ?? it.date)
-    if (!d) continue
-    if (d < mStart || d > mEnd) continue
-    const key = fmtYMD(d)
-    const val = Number(it.amount ?? it.total ?? it.value ?? 0)
-    dayAmount.set(key, (dayAmount.get(key) ?? 0) + val)
+    const label = it.label ?? it.date ?? it.day ?? it.d ?? it.key ?? it.stay_date
+    const dt = toDate(label)
+    if (!dt) continue
+    if (dt < mStart || dt > mEnd) continue
+    const key = fmtYMD(dt)
+    const val = Number(it.amount ?? it.totalAmount ?? it.total ?? it.revenue ?? it.value ?? 0)
+    dayAmount.set(key, (dayAmount.get(key) ?? 0) + (isNaN(val) ? 0 : val))
   }
+  if (dayAmount.size === 0) return null
 
-  let cur = mondayOf(mStart) // 달의 1일이 속한 주의 월요일
+  let cur = mondayOf(mStart)
   const weekSums = []
   while (cur <= mEnd) {
     const weekStart = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate())
-    const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6)
+    const weekEnd   = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6)
     const clipStart = weekStart < mStart ? mStart : weekStart
-    const clipEnd = weekEnd > mEnd ? mEnd : weekEnd
+    const clipEnd   = weekEnd   > mEnd   ? mEnd   : weekEnd
 
-    let sum = 0
+    let sum = 0, hasData = false
     for (let d = new Date(clipStart); d <= clipEnd; d.setDate(d.getDate() + 1)) {
       const k = fmtYMD(d)
-      sum += dayAmount.get(k) ?? 0
+      if (dayAmount.has(k)) { sum += dayAmount.get(k); hasData = true }
     }
-    if (sum > 0) {
-      weekSums.push(sum)
-    } else {
-      // 0 매출 주도 포함하려면 다음 줄을 사용
-      // weekSums.push(0)
-    }
-    cur.setDate(cur.getDate() + 7) // 다음 주
+    if (hasData) weekSums.push(sum)
+    cur.setDate(cur.getDate() + 7)
   }
-
   if (!weekSums.length) return null
   const total = weekSums.reduce((a, b) => a + b, 0)
   return Math.round(total / weekSums.length)
 }
 
-function recomputeAvgWeekWithinMonthUsingSalesData() {
-  if (salesMode.value !== 'month') return
-  const daily = salesData.value
-  if (!daily?.length) return
-  const avg = computeMonthlyWeeklyAverageFromDaily(daily, salesAnchor.value)
-  if (avg != null) {
-    avgWeekSales.value = avg
+async function loadAvgSales () { tryComputeAvgFromSales() }
+
+async function ensureLoadSalesOnce () {
+  await nextTick()
+  let tries = 0
+  while ((!hotelId.value || Number.isNaN(Number(hotelId.value))) && tries < 10) {
+    await new Promise(r => setTimeout(r, 100)); tries++
   }
+  if (hotelId.value) await loadSales()
 }
 
-/* [ADD] 이번 주 예약 수(월~일) 재집계 로더
-   - 서버 주차 기준이 달라도, 월요일~일요일 범위로 다시 계산해 weeklyCount를 덮어씀 */
-const recalculatingWeeklyCount = ref(false)
-async function loadWeeklyCountMonSun () {
+/* 이달 주 평균/금주 일평균 고정값 계산 */
+async function loadFixedAverages () {
   if (!hotelId.value) return
-  recalculatingWeeklyCount.value = true
+
+  // 금주 일별 평균
   try {
     const { start, end } = weekRangeOf(new Date())
-    const qs = `from=${fmtYMD(start)}&to=${fmtYMD(end)}`
-    // 1) 가장 단순: 기간 내 예약 리스트를 받아 length로 카운트
-    let res = await api(`/api/owner/hotels/${hotelId.value}/bookings?${qs}`)
-    if (res.ok) {
-      const list = await res.json()
-      if (Array.isArray(list)) {
-        weeklyCount.value = list.length
-        return
-      }
+    const resW = await api(`/api/owner/hotels/${hotelId.value}/sales?mode=week&start=${fmtYMD(start)}&end=${fmtYMD(end)}`)
+    if (resW.ok) {
+      const raw = await resW.json()
+      const arr = Array.isArray(raw) ? raw : (raw.items ?? [])
+      if (arr.length) {
+        const sum = arr.reduce((a,b)=> a + (Number(b.amount ?? b.total ?? b.value) || 0), 0)
+        fixedWeeklyAvgSales.value = Math.round(sum / arr.length)
+      } else fixedWeeklyAvgSales.value = null
     }
-    // 2) 대안: 일별 카운트 API가 있다면 합계
-    res = await api(`/api/owner/hotels/${hotelId.value}/bookings/daily?${qs}`)
-    if (res.ok) {
-      const items = await res.json()
-      const arr = Array.isArray(items) ? items : (items?.items ?? [])
-      const sum = arr.reduce((acc, it) => acc + Number(it.count ?? it.value ?? 0), 0)
-      if (!Number.isNaN(sum)) {
-        weeklyCount.value = sum
-        return
-      }
-    }
-    // 3) 마지막: 기존 weekly-count (서버 기준) 유지
-    //    → 이미 loadWeeklyCount()가 세팅했을 가능성 있음
-  } catch {
-    /* 무시하고 기존 값 유지 */
-  } finally {
-    recalculatingWeeklyCount.value = false
-  }
-}
+  } catch {}
 
-/* 이번주 정산 예정 금액 로더 (각 결제 15% 차감 후 합산) */
-async function loadSettlementThisWeek () {
-  if (!hotelId.value) return
-  loadingSettlement.value = true
+  // 이달 주 평균
   try {
-    // 전용 정산 API가 있다면 우선 시도 (서버가 월~일 기준이면 그대로 사용)
-    const res = await api(`/api/owner/hotels/${hotelId.value}/settlements/this-week`)
-    if (res.ok) {
-      const data = await res.json()
-      const val = typeof data === 'number'
-        ? data
-        : (data.amount ?? data.total ?? data.value ?? null)
-      if (val != null) {
-        settlementThisWeek.value = Number(val)
-        return
-      }
+    const mStart = monthStart(new Date()), mEnd = monthEnd(new Date())
+    let resM = await api(`/api/owner/hotels/${hotelId.value}/sales?mode=month&start=${fmtYMD(mStart)}&end=${fmtYMD(mStart)}`)
+    let arr = []
+    if (resM.ok) { const raw = await resM.json(); arr = Array.isArray(raw) ? raw : (raw.items ?? []) }
+    if (!arr.length) {
+      resM = await api(`/api/owner/hotels/${hotelId.value}/sales?mode=month&start=${fmtYMD(mStart)}&end=${fmtYMD(mEnd)}`)
+      if (resM.ok) { const raw2 = await resM.json(); arr = Array.isArray(raw2) ? raw2 : (raw2.items ?? []) }
     }
-
-    // Fallback A: 명시적으로 월~일 구간 지정해서 매출 일별/집계 가져오기
-    const { start, end } = weekRangeOf(new Date())
-    const s = fmtYMD(start), e = fmtYMD(end)
-
-    // 일별 매출이 있으면 합산
-    let res2 = await api(`/api/owner/hotels/${hotelId.value}/sales?mode=week&start=${s}&end=${e}`)
-    if (res2.ok) {
-      const raw = await res2.json()
-      const items = Array.isArray(raw) ? raw : (raw?.items ?? [])
-      if (items.length) {
-        const gross = items.reduce((sum, it) => sum + Number(it.amount ?? it.total ?? it.value ?? 0), 0)
-        const net = Math.round(gross * (1 - PLATFORM_FEE_RATE))
-        settlementThisWeek.value = net
-        return
-      }
-    }
-
-    // Fallback B: 기존 Fallback(서버가 start 기준 7일 반환 가정)
-    const startOnly = fmtYMD(mondayOf(new Date()))
-    res2 = await api(`/api/owner/hotels/${hotelId.value}/sales?mode=week&start=${startOnly}`)
-    if (!res2.ok) throw new Error(await res2.text())
-    {
-      const raw = await res2.json()
-      const items = Array.isArray(raw) ? raw : (raw?.items ?? [])
-      const gross = items.reduce((sum, it) => sum + Number(it.amount ?? it.total ?? it.value ?? 0), 0)
-      const net = Math.round(gross * (1 - PLATFORM_FEE_RATE))
-      settlementThisWeek.value = net
-    }
-  } catch {
-    settlementThisWeek.value = null
-  } finally {
-    loadingSettlement.value = false
-  }
+    const avg = computeMonthlyWeeklyAverageFromDaily(arr, new Date())
+    fixedMonthlyAvgSales.value = avg ?? null
+  } catch {}
 }
+
+/* 그래프/카운트/정산을 “이번 주”로 즉시 리프레시 */
+async function refreshThisWeekNow () {
+  salesMode.value = 'week'
+  salesAnchor.value = new Date()
+  await loadWeeklyCount()
+  await loadSettlementThisWeek()
+  await loadSales()
+}
+if (typeof window !== 'undefined') window.refreshThisWeekNow = refreshThisWeekNow
+
+/* 주 전환 감지(월요일 00:00 이후 자동 리셋) */
+let weekRolloverTimer = null
+const lastWeekKey = ref(fmtYMD(weekRangeOf(new Date()).start))
+function setupWeekRolloverTimer () {
+  const tick = async () => {
+    const curKey = fmtYMD(weekRangeOf(new Date()).start)
+    if (curKey !== lastWeekKey.value) {
+      lastWeekKey.value = curKey
+      weeklyCount.value = 0
+      await loadWeeklyCount()
+    }
+  }
+  if (weekRolloverTimer) clearInterval(weekRolloverTimer)
+  weekRolloverTimer = setInterval(tick, 60 * 1000)
+  tick()
+}
+onBeforeUnmount(() => { if (weekRolloverTimer) clearInterval(weekRolloverTimer) })
+
+/* =========================
+   라이프사이클/워처 (중복 제거)
+========================= */
+onActivated(async () => {
+  await ensureLoadSalesOnce()
+  await loadFixedAverages()
+  await loadWeeklyCount()
+})
 
 onMounted(async () => {
   hotelId.value = Number(route.params.hotelId)
   await loadHotels()
   await loadTodayRemaining()
-  await loadWeeklyCount()         // 원래 함수 유지
-  await loadWeeklyCountMonSun()   // 월~일 보정으로 덮어씀
+  await loadWeeklyCount()          // ✅ 단일 함수만 사용
   await loadTodayCheckIn()
   await loadNowCheckIn()
   await loadSettlementThisWeek()
   await loadAvgSales()
   await loadSales()
+  await loadFixedAverages()
+  setupWeekRolloverTimer()
 })
 
-watch(() => route.params.hotelId, async (v) => {
-  hotelId.value = Number(v)
+watch(() => route.params.hotelId, async v => {
+  const id = Number(v)
+  if (!Number.isFinite(id)) return
+  hotelId.value = id
   await loadTodayRemaining()
-  await loadWeeklyCount()         // 원래 함수 유지
-  await loadWeeklyCountMonSun()   // 월~일 보정으로 덮어씀
+  await loadWeeklyCount()          // ✅ 단일 함수만 사용
   await loadTodayCheckIn()
   await loadNowCheckIn()
   await loadSettlementThisWeek()
   await loadAvgSales()
   await loadSales()
+  await loadFixedAverages()
 })
+
+watch(() => route.fullPath, async (p) => {
+  if (!hotelId.value) return
+  if (p.includes('/owner/hotels/') && p.includes('/dashboard')) {
+    await ensureLoadSalesOnce()
+    await loadWeeklyCount()        // ✅ 단일 함수만 사용
+  }
+})
+
+watchEffect(async () => {
+  if (Number.isFinite(Number(hotelId.value))) await ensureLoadSalesOnce()
+}, { flush: 'post' })
 </script>
+
+
+
 
 <template>
   <div class="owner-dashboard">
     <header class="topbar">
       <div class="title"><h1 class="text-xl font-bold">대시보드</h1></div>
-      <div class="actions">
-        <button class="btn ghost" @click="$router.push('/main')">사이트 보기</button>
-        <button class="btn" @click="logout">로그아웃</button>
-      </div>
     </header>
 
     <!-- KPI 타일 -->
@@ -533,24 +558,23 @@ watch(() => route.params.hotelId, async (v) => {
       </div>
 
       <div class="kpi card">
-        <div class="kpi-label">주별 평균 매출</div>
+        <div class="kpi-label">금주 일별 평균 매출</div>
         <div class="kpi-value">
-          <span v-if="loadingAvgSales && avgWeekSales == null">…</span>
-          <span v-else>{{ avgWeekSales == null ? '—' : `${fmtKRW(avgWeekSales)}원` }}</span>
+          <span v-if="fixedWeeklyAvgSales == null">—</span>
+          <span v-else>{{ fmtKRW(fixedWeeklyAvgSales) }}원</span>
         </div>
-        <div class="kpi-help">
-          {{ salesMode === 'month' ? '이 달 내(월~일) 주 평균' : '최근 주간 평균' }}
-        </div>
+        <div class="kpi-help">이번 주(월~일) 일별 평균</div>
       </div>
 
       <div class="kpi card">
         <div class="kpi-label">월별 평균 매출</div>
         <div class="kpi-value">
-          <span v-if="loadingAvgSales && avgMonthSales == null">…</span>
-          <span v-else>{{ avgMonthSales == null ? '—' : `${fmtKRW(avgMonthSales)}원` }}</span>
+          <span v-if="fixedMonthlyAvgSales == null">—</span>
+          <span v-else>{{ fmtKRW(fixedMonthlyAvgSales) }}원</span>
         </div>
         <div class="kpi-help">최근 월간 기준</div>
-      </div>
+      </div>  
+      
     </section>
 
     <!-- 매출 추이 차트 (주/월 + 좌우 이동) -->
