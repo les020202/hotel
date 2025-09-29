@@ -42,6 +42,7 @@ import ContactCenter from '@/views/support/ContactCenter.vue'
 import SupportInquiry from '@/views/support/SupportInquiry.vue'
 import MyTickets from '@/views/support/MyTickets.vue'
 import MyTicketDetail from '@/views/support/MyTicketDetail.vue'
+import BugReport from '@/views/support/BugReport.vue'
 
 // 찜
 import Wishlist from '@/views/Wishlist.vue'
@@ -61,6 +62,7 @@ const AdminSupportLayout  = () => import('@/views/admin/support/SupportLayout.vu
 const AdminSupportNotices = () => import('@/views/admin/support/Notices.vue')
 const AdminSupportFaqs    = () => import('@/views/admin/support/Faqs.vue')
 const AdminSupportTickets = () => import('@/views/admin/support/Tickets.vue')
+import BugTickets from '@/views/admin/support/BugTickets.vue'
 
 /* ============================
  * JWT 도우미
@@ -199,6 +201,7 @@ const router = createRouter({
             { path: 'faqs',     component: AdminSupportFaqs },
             { path: 'tickets',  component: AdminSupportTickets },
             { path: 'tickets/:id', component: () => import('@/views/admin/support/TicketDetail.vue'), props: true },
+            { path: 'bugs', component: BugTickets, meta:{ requiresAdmin:true } },
           ]
         },
       ]
@@ -255,7 +258,8 @@ const router = createRouter({
     { path: '/support/contact/inquiry', component: SupportInquiry, meta: { public: true } },
     { path: '/support/contact/my', component: MyTickets, meta: { requiresAuth: true } },
     { path: '/support/contact/ticket/:id', component: MyTicketDetail, props: true, meta: { requiresAuth: true } },
-
+    { path: '/support/bugreport', component: BugReport, meta:{ requiresAuth:true } },
+    
     // 찜
     { path: '/wishlist', name: 'Wishlist', component: Wishlist, meta: { requiresAuth: true } },
 

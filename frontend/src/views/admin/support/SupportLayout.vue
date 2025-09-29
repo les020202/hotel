@@ -4,13 +4,14 @@
       <div class="hero">
         <div>
           <h2>고객 지원</h2>
-          <p>공지사항 · 자주 묻는 질문 · 고객 문의</p>
+          <p>공지사항 · 자주 묻는 질문 · 고객 문의 · 버그</p>
         </div>
   
         <div class="tabs">
           <RouterLink class="tab" :class="{on: $route.path.endsWith('/notices')}" to="/admin/support/notices">공지사항</RouterLink>
           <RouterLink class="tab" :class="{on: $route.path.endsWith('/faqs')}"    to="/admin/support/faqs">자주묻는 질문</RouterLink>
           <RouterLink class="tab" :class="{on: $route.path.endsWith('/tickets')}" to="/admin/support/tickets">문의</RouterLink>
+          <RouterLink class="tab" :class="{on: $route.path.endsWith('/bugs')}" to="/admin/support/bugs">버그</RouterLink>
         </div>
       </div>
   

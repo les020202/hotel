@@ -17,6 +17,15 @@
         <div class="chev">›</div>
       </button>
 
+      <!-- 버그신고 작성 -->
+      <button class="row" @click="$router.push('/support/bugreport')">
+        <div class="left">
+          <div class="main">버그신고</div>
+          <span class="pill">문제를 알려주세요</span>
+        </div>
+        <div class="chev">›</div>
+      </button>
+
       <!-- 내 문의함 -->
       <button class="row" @click="$router.push('/support/contact/my')">
         <div class="left">
