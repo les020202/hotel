@@ -1,80 +1,95 @@
+<!-- src/views/admin/CouponManage.vue -->
 <template>
-  <div class="wrap">
-    <header class="topbar">
-      <div class="titles">
-        <h1>쿠폰 / 프로모션 관리</h1>
-        <p class="sub">정액(원) 차감 쿠폰만 지원합니다.</p>
+  <section class="wrap wrap--wide">
+    <!-- 헤더 -->
+    <div class="hero">
+      <div>
+        <h2>쿠폰 / 프로모션 관리</h2>
+        <p>정액(원) 차감 쿠폰만 지원합니다.</p>
       </div>
-      <div class="actions">
-        <div class="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-          <input v-model.trim="q" placeholder="코드·제목 검색" />
-        </div>
-        <button class="btn primary" @click="openCreate">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          쿠폰 등록
-        </button>
+      <button class="btn" @click="openCreate">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        쿠폰 등록
+      </button>
+    </div>
+
+    <!-- 검색 -->
+    <div class="toolbar">
+      <input
+        v-model.trim="q"
+        class="search"
+        placeholder="코드·제목 검색"
+        @keyup.enter="load"
+      />
+      <div class="pills">
+        <button class="pill ghost" @click="load">검색</button>
       </div>
-    </header>
+    </div>
 
-    <section class="card table">
-      <div class="table-head">
-        <span>#</span>
-        <span>코드</span>
-        <span>제목</span>
-        <span class="right amount">차감 금액</span>
-        <span>중복 사용</span>
-        <span>유효기간</span>
-        <span>생성일</span>
-        <span class="center">액션</span>
-      </div>
+    <!-- 표 -->
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:60px">#</th>
+            <th style="min-width:140px">코드</th>
+            <th>제목</th>
+            <th class="right" style="width:140px">차감 금액</th>
+            <th style="width:120px">중복 사용</th>
+            <th style="min-width:220px">유효기간</th>
+            <th style="min-width:180px">생성일</th>
+            <th style="width:180px" class="center">액션</th>
+          </tr>
+        </thead>
 
-      <div v-if="loading" class="skeleton-wrap">
-        <div class="skeleton-row" v-for="i in 5" :key="i"></div>
-      </div>
+        <tbody>
+          <tr v-for="c in filtered" :key="c.id">
+            <td class="muted">#{{ c.id }}</td>
 
-      <template v-else>
-        <div v-for="c in filtered" :key="c.id" class="table-row">
-          <span class="muted">#{{ c.id }}</span>
+            <td>
+              <button class="code-badge" @click="copyCode(c.code)" :title="`클릭하여 복사: ${c.code}`">
+                <span class="code-text">{{ c.code }}</span>
+                <svg class="copy-ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 3H8a2 2 0 0 0-2 2v0m0 0H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8m-5-14h8a2 2 0 0 1 2 2v10M9 21h8a2 2 0 0 0 2-2V9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                </svg>
+              </button>
+            </td>
 
-          <!-- 코드 뱃지 (복사 가능) -->
-          <button class="code-badge" @click="copyCode(c.code)" :title="`클릭하여 복사: ${c.code}`">
-            <span class="code-text">{{ c.code }}</span>
-            <svg class="copy-ico" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M16 3H8a2 2 0 0 0-2 2v0m0 0H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8m-5-14h8a2 2 0 0 1 2 2v10M9 21h8a2 2 0 0 0 2-2V9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-            </svg>
-          </button>
+            <td class="ellipsis">{{ c.title }}</td>
+            <td class="right strong">₩{{ Number(c.amount||0).toLocaleString() }}</td>
 
-          <span class="ellipsis">{{ c.title }}</span>
-          <span class="right strong">{{ fmt(c.amount) }}</span>
+            <td>
+              <span class="badge" :data-variant="c.stackable ? 'ok' : 'no'">
+                {{ c.stackable ? '가능' : '불가' }}
+              </span>
+            </td>
 
-          <span>
-            <span :class="['badge', c.stackable ? 'ok' : 'no']">
-              {{ c.stackable ? '가능' : '불가' }}
-            </span>
-          </span>
+            <td class="muted">
+              {{ c.validFrom && c.validTo ? (c.validFrom + ' ~ ' + c.validTo) : '상시' }}
+            </td>
 
-          <span class="muted">
-            {{ c.validFrom && c.validTo ? (c.validFrom + ' ~ ' + c.validTo) : '상시' }}
-          </span>
+            <td class="muted">{{ c.createdAt || '-' }}</td>
 
-          <span class="muted">{{ c.createdAt || '-' }}</span>
+            <td class="center actions-col">
+              <button class="btn ghost xs" @click="openEdit(c)">수정</button>
+              <button class="btn danger xs" @click="remove(c)">삭제</button>
+            </td>
+          </tr>
 
-          <span class="center actions-col">
-            <button class="btn ghost sm" @click="openEdit(c)">수정</button>
-            <button class="btn danger sm" @click="remove(c)">삭제</button>
-          </span>
-        </div>
+          <tr v-if="!loading && !filtered.length">
+            <td colspan="8" class="empty">등록된 쿠폰이 없습니다.</td>
+          </tr>
+        </tbody>
+      </table>
 
-        <div v-if="!filtered.length" class="empty">
-          등록된 쿠폰이 없습니다.
-        </div>
-      </template>
-    </section>
+      <div v-if="loading" class="loading">불러오는 중…</div>
+    </div>
 
     <!-- 등록/수정 모달 -->
-    <div v-if="show" class="backdrop" @click.self="closeModal">
-      <div class="modal">
+    <dialog v-if="show" open class="modal" @click.self="closeModal">
+      <div class="modal-body">
         <div class="modal-head">
           <strong>{{ editingId ? '쿠폰 수정' : '쿠폰 등록' }}</strong>
           <button class="icon" @click="closeModal" aria-label="닫기">×</button>
@@ -106,17 +121,15 @@
           </label>
 
           <div class="grid-2">
-  <label>
-    <span>유효 시작일</span>
-    <!-- 오늘 이전 선택 불가 -->
-    <input type="date" v-model="form.validFrom" :min="today">
-  </label>
-  <label>
-    <span>유효 종료일</span>
-    <!-- 시작일이 있으면 그 날부터, 없으면 오늘부터 선택 -->
-    <input type="date" v-model="form.validTo" :min="form.validFrom || today">
-  </label>
-</div>
+            <label>
+              <span>유효 시작일</span>
+              <input type="date" v-model="form.validFrom" :min="today">
+            </label>
+            <label>
+              <span>유효 종료일</span>
+              <input type="date" v-model="form.validTo" :min="form.validFrom || today">
+            </label>
+          </div>
 
           <div class="form-row right">
             <button type="button" class="btn ghost" @click="closeModal">취소</button>
@@ -129,16 +142,16 @@
           <p v-if="err" class="err">{{ err }}</p>
         </form>
       </div>
-    </div>
+    </dialog>
 
     <!-- 토스트 -->
     <div v-if="toast" class="toast">{{ toast }}</div>
-  </div>
+  </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { get, post, put, del } from '@/api/_http'  // /admin/... 경로 사용
+import { get, post, put, del } from '@/api/_http'
 
 const today = new Date().toISOString().slice(0,10)
 const loading = ref(true)
@@ -171,19 +184,17 @@ function mapCoupon(c) {
     createdAt: c.createdAt || c.created_at || ''
   }
 }
+
 function validate() {
   if (!form.value.code || !form.value.title) return '코드와 제목을 입력하세요.'
   if (!form.value.amount || form.value.amount < 1) return '차감 금액은 1원 이상이어야 합니다.'
-  // 종료일은 오늘 이전 금지
-  if (form.value.validTo && form.value.validTo < today) {
-    return '유효 종료일은 오늘(포함) 이후여야 합니다.'
-  }
-  // 시작일 > 종료일 금지
+  if (form.value.validTo && form.value.validTo < today) return '유효 종료일은 오늘(포함) 이후여야 합니다.'
   if (form.value.validFrom && form.value.validTo && form.value.validFrom > form.value.validTo) {
     return '유효 종료일은 시작일 이후여야 합니다.'
   }
   return ''
 }
+
 async function load() {
   loading.value = true
   try {
@@ -206,8 +217,6 @@ const filtered = computed(() => {
   )
 })
 
-function fmt(n) { return `${Number(n || 0).toLocaleString()}원` }
-
 function openCreate() {
   err.value = ''
   editingId.value = null
@@ -228,7 +237,6 @@ function openEdit(c) {
   show.value = true
 }
 function closeModal() { show.value = false }
-
 
 async function save() {
   err.value = validate()
@@ -292,87 +300,48 @@ onMounted(load)
 </script>
 
 <style scoped>
-/* ---------- 레이아웃 & 상단바 ---------- */
-.wrap {
-  flex: 1;
-  width: 100%;
-  min-width: 0;          /* ★ flex 컨테이너 안에서 줄어들 수 있게 */
-  padding: 20px 22px 40px;
-  box-sizing: border-box;
-}
-.topbar{
-  display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
-  margin-bottom:16px; padding:18px 18px 16px; border:1px solid #e7edf7; border-radius:16px;
-  background: radial-gradient(800px 260px at 8% 0%, #eef6ff 0%, transparent 60%), linear-gradient(180deg,#fff,#f9fbff);
-  box-shadow: 0 10px 24px rgba(15,23,42,.05);
-}
-.titles h1{ margin:0; font-size:20px; font-weight:800; letter-spacing:.2px }
-.titles .sub{ margin:4px 0 0; color:#6b7280; font-size:12px }
-.actions{ display:flex; align-items:center; gap:10px }
-.search{
-  display:flex; align-items:center; gap:8px; padding:8px 10px; width:240px;
-  border:1px solid #e1e8f5; border-radius:12px; background:#fff; color:#6b7280;
-}
-.search svg{ width:18px; height:18px }
-.search input{ border:0; outline:none; flex:1; font-size:14px; background:transparent; color:#0f172a }
+:root{ --line:#e8ecf6; --card:#fff; --muted:#6b7280; --ink:#111827; }
 
-/* ---------- 버튼 ---------- */
-.btn{
-  display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:0; cursor:pointer;
-  font-weight:800; font-size:14px; transition:transform .06s ease, box-shadow .12s ease;
-}
-.btn svg{ width:18px; height:18px }
-.btn.primary{ color:#fff; background:linear-gradient(135deg,#3b82f6,#2563eb); box-shadow:0 8px 20px rgba(37,99,235,.25) }
-.btn.primary:hover{ background:linear-gradient(135deg,#2563eb,#1d4ed8) }
-.btn.ghost{ background:#fff; color:#0f172a; border:1px solid #e1e8f5 }
-.btn.danger{ color:#fff; background:#ef4444 }
-.btn.sm{ padding:6px 10px; font-size:12px; border-radius:10px }
+.wrap{ padding:14px }
 
-/* ---------- 테이블 카드 ---------- */
-.card{ border:1px solid #e7edf7; border-radius:16px; background:#fff; box-shadow: 0 12px 28px rgba(15,23,42,.05) }
-.table{ padding:8px; overflow-x:auto; } /* ★ 좁아지면 내부 스크롤 */
-
-/* 8열 그리드(유연) */
-.table-head, .table-row{
-  display:grid;
-  grid-template-columns:
-    70px                                   /* # */
-    minmax(120px, max-content)             /* 코드(내용 길이만큼) */
-    1fr                                     /* 제목 */
-    minmax(110px, 140px)                   /* 차감 금액 */
-    minmax(88px, 110px)                    /* 중복 사용 */
-    minmax(220px, 1fr)                     /* 유효기간 */
-    minmax(180px, 1fr)                     /* 생성일 */
-    150px;                                 /* 액션 */
-  align-items:center;
-  column-gap: 22px;                        /* ★ 금액↔중복 사용 간격 확보 */
-  padding:12px;
-  min-width: 980px;                        /* ★ 더 좁아지면 가로 스크롤 */
+/* 헤더 */
+.hero{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px; border-radius:16px;
+  background:linear-gradient(135deg,#f7faff,#f0f6ff);
+  border:1px solid #eaf0ff; margin-bottom:12px;
 }
-@media (max-width: 960px){
-  .table-head, .table-row{ min-width: 860px; }
-}
+.hero h2{ margin:0; font-size:18px; font-weight:800; color:var(--ink) }
+.hero p{ margin:4px 0 0; color:#6b7280; font-size:12px }
 
-.table-head{ position:sticky; top:0; background:#f9fbff; z-index:1; border-radius:12px; font-weight:700; color:#475569 }
-.table-row{ border-top:1px solid #f0f4fb }
-.table-row:hover{ background:#fcfdff }
-.right{ text-align:right }
-.center{ text-align:center }
+/* 툴바 */
+.toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap }
+.search{ flex:1 1 360px; height:40px; border-radius:12px; border:1px solid var(--line); padding:0 14px; outline:none }
+.search:focus{ box-shadow:0 0 0 3px rgba(37,99,235,.1); border-color:#cfe0ff }
+.pills{ display:flex; gap:8px; flex-wrap:wrap }
+.pill{ display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--line); background:#fff; border-radius:20px; font-weight:700 }
+.pill.ghost{ background:#f7faff } .pill.ghost:hover{ background:#eef5ff }
+
+/* 표 카드 */
+.card{ background:#fff; border:1px solid var(--line); border-radius:12px }
+.table-card{ overflow:auto }
+.table{ width:100%; border-collapse:collapse }
+th,td{ padding:12px 12px; border-bottom:1px solid #f1f4fb; text-align:left; font-size:14px }
+th{ color:#475569; font-weight:800; background:#fbfdff }
+.right{ text-align:right } .center{ text-align:center }
 .strong{ font-weight:800 }
 .muted{ color:#6b7280 }
-.ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.actions-col{ display:flex; align-items:center; justify-content:center; gap:6px }
+.ellipsis{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:520px }
+.empty{ text-align:center; color:#94a3b8; padding:18px 0 }
+.loading{ padding:14px; text-align:center }
 
-/* ---------- 코드 뱃지 ---------- */
+/* 코드 뱃지 */
 .code-badge{
   display:inline-flex; align-items:center; gap:8px;
   padding:6px 12px; border-radius:12px; border:1px solid #101826;
   background: linear-gradient(180deg, #0b1220, #0c1322); color:#e8f0ff;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 6px 18px rgba(2,6,23,.22);
   cursor:pointer;
-  justify-self: start;                      /* 그리드 stretch 해제 */
-  width: auto;                              /* 내용 길이만큼 */
-  max-width: 100%;
 }
 .code-text{
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -381,22 +350,25 @@ onMounted(load)
 .copy-ico{ width:16px; height:16px; opacity:.65; transition:opacity .15s ease }
 .code-badge:hover .copy-ico{ opacity:1 }
 
-/* ---------- 배지/스켈/빈상태 ---------- */
+/* 배지 */
 .badge{ display:inline-block; padding:3px 10px; border-radius:999px; font-weight:800; font-size:12px }
-.badge.ok{ background:#0f172a; color:#fff }
-.badge.no{ background:#eef2ff; color:#475569 }
+.badge[data-variant="ok"]{ background:#0f172a; color:#fff }
+.badge[data-variant="no"]{ background:#eef2ff; color:#475569 }
 
-.empty{ text-align:center; color:#94a3b8; padding:26px }
-.skeleton-wrap{ padding:8px 12px }
-.skeleton-row{ height:46px; border-radius:10px; margin:6px 0; background: linear-gradient(90deg, #f3f6fb 25%, #eaf0f9 37%, #f3f6fb 63%); background-size: 400% 100%; animation: shimmer 1.2s infinite }
-@keyframes shimmer{ 0%{ background-position: 100% 0 } 100%{ background-position: 0 0 } }
-
-/* ---------- 모달 ---------- */
-.backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.35); display:grid; place-items:center; z-index:50 }
-.modal{ width:min(560px, 92vw); border-radius:18px; background:#fff; border:1px solid #e7edf7; box-shadow:0 20px 50px rgba(15,23,42,.25) }
-.modal-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #eef3fb }
+/* 모달 */
+.modal{
+  position: fixed; inset: 0; margin: auto;
+  max-width: 560px; width: 92%;
+  border: 0; border-radius: 18px; padding: 0;
+  background:#fff; box-shadow:0 20px 50px rgba(15,23,42,.25);
+}
+.modal::backdrop{ background: rgba(0,0,0,.35); -webkit-backdrop-filter: saturate(120%) blur(2px); backdrop-filter: saturate(120%) blur(2px) }
+.modal-body{ padding:16px }
+.modal-head{ display:flex; align-items:center; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid #eef3fb; margin-bottom:10px }
 .modal .icon{ background:transparent; border:0; font-size:22px; cursor:pointer; color:#6b7280 }
-.form{ padding:16px; display:grid; gap:12px }
+
+/* 폼 */
+.form{ display:grid; gap:12px }
 .form label{ display:grid; gap:6px; font-size:13px; color:#334155 }
 .form input[type="text"], .form input[type="number"], .form input[type="date"]{
   height:40px; padding:8px 12px; border-radius:12px; border:1px solid #dfe7f6; outline:none; font-size:14px; background:#fff; color:#0f172a; transition:border-color .18s ease, box-shadow .18s ease
@@ -409,15 +381,46 @@ onMounted(load)
 .input-amount .suffix{ position:absolute; top:50%; right:10px; transform:translateY(-50%); color:#6b7280; font-size:13px; pointer-events:none }
 .form-row.right{ margin-top:4px; display:flex; justify-content:flex-end; gap:8px }
 .spinner{ display:inline-block; width:18px; height:18px; border:2px solid rgba(255,255,255,.6); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite }
-@keyframes spin{ to{ transform:rotate(360deg) } }
 .hint{ color:#64748b; font-size:12px }
-.err{ color:#e11d48; font-size:13px; margin-top:6px }
+.err{ color:#e11d48; font-size:13px; margin-top:4px }
 
-/* ---------- 토스트 ---------- */
+/* 버튼 */
+.btn{
+  display:inline-flex; align-items:center; gap:8px;
+  height:34px; padding:0 12px; border-radius:10px;
+  border:1px solid #cfe0ff; background:#f5f9ff; font-weight:800; cursor:pointer
+}
+.btn svg{ width:18px; height:18px }
+.btn.primary{ color:#fff; background:linear-gradient(135deg,#3b82f6,#2563eb); box-shadow:0 8px 20px rgba(37,99,235,.25) }
+.btn.ghost{ background:#fff; color:#0f172a; border:1px solid #e1e8f5 }
+.btn.danger{ color:#b91c1c; background:#fff5f5; border-color:#fecaca }
+.btn.danger:hover{ background:#ffe9e9 }
+.btn.xs{ height:28px; font-size:12px; border-radius:10px }
+
+/* 액션/토스트 */
+.actions-col{ display:flex; align-items:center; justify-content:center; gap:6px }
 .toast{
   position:fixed; right:18px; bottom:18px; padding:10px 14px; border-radius:12px;
   color:#0f172a; background:#fff; border:1px solid #e7edf7; box-shadow:0 10px 26px rgba(15,23,42,.18);
   font-weight:700; z-index:60;
 }
 
+/* 가로 스크롤바 톤(한 번만 정의) */
+.table-card{ scrollbar-color:#a4b9d8 #eef2ff; scrollbar-width:thin; }
+:deep(.table-card)::-webkit-scrollbar{ height:10px; }
+:deep(.table-card)::-webkit-scrollbar-track{ background:#eef2ff; border-radius:8px; }
+:deep(.table-card)::-webkit-scrollbar-thumb{ background:#94a3b8; border-radius:8px; }
+:deep(.table-card)::-webkit-scrollbar-thumb:hover{ background:#c9d4e2; }
+
+/* 헤더 세로깨짐 방지(한 줄만) */
+:deep(.table thead th),
+:deep(.table thead th *){ white-space:nowrap; word-break:keep-all; line-height:1.25; }
+
+/* 풀폭: 이 페이지 한정 */
+.wrap.wrap--wide{ width:100% !important; max-width:none !important; margin:0 !important; }
+.wrap.wrap--wide .hero,
+.wrap.wrap--wide .card,
+.wrap.wrap--wide .table-card{ width:100% !important; max-width:none !important; }
+.wrap.wrap--wide .table{ width:100% !important; table-layout:auto; min-width:0 !important; }
+.wrap.wrap--wide .actions-col{ flex-wrap:nowrap; }
 </style>
