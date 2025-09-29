@@ -15,9 +15,9 @@
         <label class="lbl">상태</label>
         <select v-model="q.status">
           <option :value="null">전체</option>
-          <option value="CONFIRMED">CONFIRMED</option>
-          <option value="CANCELLED">CANCELLED</option>
-          <option value="PENDING">PENDING</option>
+          <option value="CONFIRMED">예약 확정</option>
+          <option value="CANCELLED">예약 취소</option>
+          <option value="PENDING">대기 중</option>
         </select>
       </div>
 
@@ -50,42 +50,55 @@
     <!-- 표 -->
     <div class="card table-card no-h-scroll">
       <table class="table">
+        <!-- 열 폭 고정: 칸 흔들림 방지 -->
+        <colgroup>
+          <col style="width:90px" />   <!-- 예약번호 -->
+          <col style="width:180px" />  <!-- 고객 -->
+          <col style="width:200px" />  <!-- 호텔 -->
+          <col style="width:160px" />  <!-- 객실 -->
+          <col style="width:130px" />  <!-- 체크인 -->
+          <col style="width:80px" />   <!-- 박수 -->
+          <col style="width:150px" />  <!-- 금액 -->
+          <col style="width:120px" />  <!-- 상태 -->
+          <col style="width:100px" />  <!-- 영수증 -->
+          <col style="width:100px" />  <!-- 관리 -->
+        </colgroup>
+
         <thead>
           <tr>
-            <th>예약번호</th>
-            <th>고객</th>
-            <th>호텔</th>
-            <th>객실</th>
-            <th>체크인</th>
-            <th>박수</th>
-            <th class="right">금액</th>
-            <th class="center">상태</th>
-            <th class="center">영수증</th>
-            <th class="center">관리</th>
+            <th class="th-left">예약번호</th>
+            <th class="th-left">고객</th>
+            <th class="th-left">호텔</th>
+            <th class="th-left">객실</th>
+            <th class="th-center">체크인</th>
+            <th class="th-center">박수</th>
+            <th class="th-right">금액</th>
+            <th class="th-center">상태</th>
+            <th class="th-center">영수증</th>
+            <th class="th-center">관리</th>
           </tr>
         </thead>
+
         <tbody>
           <tr v-for="b in bookings" :key="b.bookingId">
-            <td>#{{ b.bookingId }}</td>
-            <td>
-              <div class="b">{{ b.userName || '-' }}</div>
-              <div class="muted text-xs">{{ b.userLoginId }}</div>
+            <td class="td-left">#{{ b.bookingId }}</td>
+            <td class="td-left">
+              <div class="b ellipsis">{{ b.userName || '-' }}</div>
+              <div class="muted text-xs ellipsis">{{ b.userLoginId }}</div>
             </td>
-            <td class="ellipsis">{{ b.hotelName }}</td>
-            <td class="ellipsis">{{ b.roomTypeName }}</td>
-            <td>{{ b.checkIn || '-' }}</td>
-            <td>{{ b.nights ?? '-' }}</td>
-            <td class="right nowrap">{{ nfmt(b.totalAmount) }} {{ b.currency }}</td>
-            <td class="center">
-              <span :class="badgeClass(b.status)">{{ b.status }}</span>
+            <td class="td-left ellipsis">{{ b.hotelName }}</td>
+            <td class="td-left ellipsis">{{ b.roomTypeName }}</td>
+            <td class="td-center">{{ b.checkIn || '-' }}</td>
+            <td class="td-center">{{ b.nights ?? '-' }}</td>
+            <td class="td-right nowrap">{{ nfmt(b.totalAmount) }} {{ b.currency }}</td>
+            <td class="td-center">
+              <span :class="badgeClass(b.status)">{{ statusLabel(b.status) }}</span>
             </td>
-            <td class="center">
-              <a v-if="b.receiptUrl"
-                 :href="b.receiptUrl" target="_blank" rel="noopener"
-                 class="link">보기</a>
+            <td class="td-center">
+              <a v-if="b.receiptUrl" :href="b.receiptUrl" target="_blank" rel="noopener" class="link">보기</a>
               <span v-else class="muted">-</span>
             </td>
-            <td class="center">
+            <td class="td-center">
               <button
                 class="btn danger xs"
                 :disabled="!canCancel(b) || loading"
@@ -108,13 +121,9 @@
     <div class="pager">
       <div class="muted">총 {{ totalElements.toLocaleString() }}건</div>
       <div class="controls">
-        <button class="btn ghost"
-                :disabled="page<=0 || loading"
-                @click="reload(page-1)">이전</button>
+        <button class="btn ghost" :disabled="page<=0 || loading" @click="reload(page-1)">이전</button>
         <span class="muted">페이지 {{ page+1 }} / {{ totalPages }}</span>
-        <button class="btn ghost"
-                :disabled="page>=totalPages-1 || loading"
-                @click="reload(page+1)">다음</button>
+        <button class="btn ghost" :disabled="page>=totalPages-1 || loading" @click="reload(page+1)">다음</button>
         <select v-model.number="size" @change="reload(0)" class="sel">
           <option :value="10">10</option>
           <option :value="20">20</option>
@@ -152,6 +161,15 @@ const q = ref({
   from: '',
   to: ''
 })
+
+const statusLabel = (s) => {
+  const map = {
+    CONFIRMED: '예약 확정',
+    PENDING:   '대기 중',
+    CANCELLED: '예약 취소',
+  }
+  return map[s] ?? s
+}
 
 const nfmt = (n) => (n == null ? '-' : Number(n).toLocaleString('ko-KR'))
 
@@ -252,7 +270,7 @@ onMounted(() => reload(0))
 .wrap{ padding:14px }
 .wrap--wide{ width:100% !important; max-width:none !important; margin:0 !important; }
 
-/* 헤더(Hotel Review 톤) */
+/* 헤더 */
 .hero{
   display:flex; align-items:center; justify-content:space-between;
   padding:16px 18px; border-radius:16px;
@@ -272,12 +290,17 @@ onMounted(() => reload(0))
   background:#fff; border-radius:12px;
 }
 .pill.grow{ grid-column: span 2 / span 2; }
-@media (max-width: 980px){ .toolbar{ grid-template-columns: 1fr 1fr; } .pill.grow{ grid-column: span 2 / span 2; } }
+@media (max-width: 980px){
+  .toolbar{ grid-template-columns: 1fr 1fr; }
+  .pill.grow{ grid-column: span 2 / span 2; }
+}
 .lbl{ font-size:12px; color:#6b7280 }
 .pill input, .pill select{
   height:36px; border:1px solid #e1e8f5; border-radius:10px; padding:0 10px; outline:none;
 }
-.pill input:focus, .pill select:focus{ box-shadow:0 0 0 3px rgba(37,99,235,.12); border-color:#cfe0ff }
+.pill input:focus, .pill select:focus{
+  box-shadow:0 0 0 3px rgba(37,99,235,.12); border-color:#cfe0ff
+}
 .pills-right{ display:flex; gap:8px; align-items:center }
 
 /* 버튼 */
@@ -293,26 +316,49 @@ onMounted(() => reload(0))
 
 /* 카드/테이블 */
 .card{ background:#fff; border:1px solid var(--line); border-radius:12px }
-.table-card{ overflow:auto }            /* 내부 스크롤 허용(세로만) */
-.no-h-scroll{ overflow-x:hidden }       /* 가로 스크롤바 제거 */
+.table-card{ overflow:auto }
+.no-h-scroll{ overflow-x:hidden }
 
-.table{ width:100%; border-collapse:collapse; table-layout:auto } /* 넘치지 않게 자동 레이아웃 */
-th,td{ padding:12px; border-bottom:1px solid #f1f4fb; font-size:14px; vertical-align:top }
-th{ color:#475569; font-weight:800; background:#fbfdff }
+/* 테이블: 칸 정렬 안정화 */
+.table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed; /* 열폭 고정 */
+}
+th,td{
+  padding:12px;
+  border-bottom:1px solid #f1f4fb;
+  font-size:14px;
+  vertical-align:middle; /* 가운데 정렬 */
+  line-height:1.25;
+}
+th{
+  color:#475569; font-weight:800; background:#fbfdff;
+}
 
-/* 헤더는 줄바꿈 금지, 본문은 줄바꿈 허용해서 가로 스크롤 방지 */
+/* 헤더/본문 정렬 클래스 */
+.th-left{ text-align:left }
+.th-center{ text-align:center }
+.th-right{ text-align:right }
+.td-left{ text-align:left }
+.td-center{ text-align:center }
+.td-right{ text-align:right }
+
+/* 글자 줄바꿈/말줄임 */
 th, th *{ white-space:nowrap; word-break:keep-all }
-td{ white-space:normal; word-break:break-word }   /* 긴 텍스트/URL 줄바꿈 */
+td{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .nowrap{ white-space:nowrap }
+.ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 
 .b{ font-weight:700 } .muted{ color:#6b7280 } .text-xs{ font-size:12px }
-.right{ text-align:right } .center{ text-align:center }
 .link{ color:#2563eb; text-decoration:underline }
-.ellipsis{ overflow:hidden; text-overflow:ellipsis }
 
 /* 상태 배지 */
 .badge{
-  display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:800;
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:72px; /* 글자 길이 달라도 칸 맞춤 */
+  padding:4px 10px;
+  border-radius:999px; font-size:12px; font-weight:800;
   border:1px solid #e5e7eb; background:#f9fafb;
 }
 .badge.ok{ background:#ecfdf5; border-color:#a7f3d0; color:#065f46 }
