@@ -233,11 +233,6 @@
       <button class="save" :disabled="isSaveDisabled" @click="save">저장</button>
     </div>
 
-    <!-- 쿠폰함 -->
-    <div class="coupon">
-      <RouterLink to="/mypage/coupon" class="btn">쿠폰함 이동</RouterLink>
-    </div>
-
     <!-- 우편번호 모달 -->
     <PostcodeSearch v-if="showPostcode" @close="showPostcode = false" @select="onSelectPostcode" />
   </div>

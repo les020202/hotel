@@ -35,7 +35,7 @@
       <RouterLink to="/mypage/account">계정</RouterLink>
       <RouterLink to="/mypage/history">내역</RouterLink>
       <RouterLink to="/mypage/support">고객지원</RouterLink>
-      <RouterLink to="/main">Home</RouterLink>
+      <RouterLink to="/mypage/coupon">쿠폰함</RouterLink>
     </nav>
 
     <!-- 🔹 탭별 내용 표시 영역 -->

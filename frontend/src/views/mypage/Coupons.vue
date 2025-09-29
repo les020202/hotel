@@ -2,7 +2,6 @@
 <template>
   <div class="coupon-page page">
     <div class="topbar">
-      <button class="icon" @click="$router.back()" aria-label="뒤로가기">‹</button>
       <div class="topbar-title">내 쿠폰함</div>
       <span class="spacer" aria-hidden="true"></span>
     </div>
