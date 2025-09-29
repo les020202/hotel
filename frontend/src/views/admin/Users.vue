@@ -1,77 +1,81 @@
+<!-- src/views/admin/UserManage.vue -->
 <template>
-  <div class="wrap">
-    <!-- 상단바 -->
-    <header class="topbar">
-      <div class="titles">
-        <h1>유저 관리</h1>
-        <p class="sub">검색: 아이디 / 이메일 / 이름</p>
+  <section class="wrap">
+    <!-- 헤더 -->
+    <div class="hero">
+      <div>
+        <h2>유저 관리</h2>
+        <p>아이디 / 이메일 / 이름 검색</p>
       </div>
+    </div>
 
-      <div class="actions">
-        <div class="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
-                  fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          </svg>
-          <input v-model.trim="q" placeholder="아이디/이메일/이름 검색" />
+    <!-- 검색/필터 바 -->
+    <div class="toolbar">
+      <input
+        v-model.trim="q"
+        class="search"
+        placeholder="아이디/이메일/이름 입력"
+        @keyup.enter="load"
+      />
+      <div class="pills">
+        <div class="pill">
+          <span>역할</span>
+          <select v-model="role">
+            <option value="">전체</option>
+            <option value="ROLE_USER">유저</option>
+            <option value="ROLE_ADMIN">관리자</option>
+            <option value="ROLE_OWNER">호텔업주</option>
+          </select>
         </div>
-
-        <select v-model="role" class="select">
-          <option value="">전체 역할</option>
-          <option value="ROLE_USER">유저</option>
-          <option value="ROLE_ADMIN">관리자</option>
-          <option value="ROLE_OWNER">호텔업주</option>
-        </select>
-
-        <select v-model="status" class="select">
-          <option value="">전체 상태</option>
-          <option value="ACTIVE">활성화</option>
-          <option value="LOCKED">잠금</option>
-          <option value="INACTIVE">비활성화</option>
-        </select>
+        <div class="pill">
+          <span>상태</span>
+          <select v-model="status">
+            <option value="">전체</option>
+            <option value="ACTIVE">활성화</option>
+            <option value="LOCKED">잠금</option>
+            <option value="INACTIVE">비활성화</option>
+          </select>
+        </div>
+        <button class="pill ghost" @click="load">검색</button>
       </div>
-    </header>
+    </div>
 
-    <!-- 테이블 카드 -->
-    <section class="card table">
-      <div class="table-head">
-        <span>#</span>
-        <span>아이디</span>
-        <span>이름</span>
-        <span>이메일</span>
-        <span>전화</span>
-        <span>역할</span>
-        <span>상태</span>
-        <span>가입일</span>
-        <span class="center">액션</span>
-      </div>
-
-      <div v-if="loading" class="skeleton-wrap">
-        <div class="skeleton-row" v-for="i in 6" :key="i"></div>
-      </div>
-
-      <template v-else>
-        <div v-for="u in rows" :key="u.id" class="table-row">
-          <span class="muted">#{{ u.id }}</span>
-          <span class="ellipsis">{{ u.loginId }}</span>
-          <span class="ellipsis">{{ u.name }}</span>
-          <span class="ellipsis">{{ u.email }}</span>
-          <span class="ellipsis">{{ u.phone || '-' }}</span>
-
-          <span>
-            <select
-              :value="u.role"
-              @change="onChangeRole(u, ($event.target as HTMLSelectElement).value)"
-              class="pill-select"
-            >
-              <option value="ROLE_USER">유저</option>
-              <option value="ROLE_ADMIN">관리자</option>
-              <option value="ROLE_OWNER">호텔업주</option>
-            </select>
-          </span>
-
-          <span>
-            <span class="state" :data-s="u.status">
+    <!-- 표 -->
+    <div class="card table-card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:60px">#</th>
+            <th>아이디</th>
+            <th>이름</th>
+            <th>이메일</th>
+            <th>전화</th>
+            <th>역할</th>
+            <th>상태</th>
+            <th>가입일</th>
+            <th style="width:120px" class="center">액션</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="u in rows" :key="u.id">
+            <td class="muted">#{{ u.id }}</td>
+            <td>{{ u.loginId }}</td>
+            <td>{{ u.name }}</td>
+            <td>{{ u.email }}</td>
+            <td>{{ u.phone || '-' }}</td>
+            <td>
+              <select
+                :value="u.role"
+                @change="onChangeRole(u, ($event.target as HTMLSelectElement).value)"
+                class="pill-select"
+              >
+                <option value="ROLE_USER">유저</option>
+                <option value="ROLE_ADMIN">관리자</option>
+                <option value="ROLE_OWNER">호텔업주</option>
+              </select>
+            </td>
+            <td>
+              <span class="badge" :data-variant="u.status">{{ u.status }}</span>
               <select
                 :value="u.status"
                 @change="onChangeStatus(u, ($event.target as HTMLSelectElement).value)"
@@ -80,22 +84,25 @@
                 <option value="LOCKED">잠금</option>
                 <option value="INACTIVE">비활성화</option>
               </select>
-            </span>
-          </span>
+            </td>
+            <td class="muted">{{ u.createdAt }}</td>
+            <td class="center">
+              <button class="btn danger xs" @click="remove(u)" :disabled="u.status==='DELETED'">
+                삭제
+              </button>
+            </td>
+          </tr>
+          <tr v-if="!loading && rows.length===0">
+            <td colspan="9" class="empty">검색 결과가 없습니다.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="loading" class="loading">불러오는 중…</div>
+    </div>
 
-          <span class="muted ellipsis">{{ u.createdAt }}</span>
-
-          <span class="center actions-col">
-            <button class="btn danger sm" @click="remove(u)" :disabled="u.status==='DELETED'">삭제</button>
-          </span>
-        </div>
-
-        <div v-if="!rows.length" class="empty">검색 결과가 없습니다.</div>
-      </template>
-    </section>
-
+    <!-- 토스트 -->
     <div v-if="toast" class="toast">{{ toast }}</div>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -153,97 +160,51 @@ function toastOnce(msg:string){ toast.value=msg; setTimeout(()=>toast.value='',1
 </script>
 
 <style scoped>
-/* === 쿠폰/프로모션 페이지와 1:1 동일 규격 === */
-.wrap {
-  flex: 1;
-  width: 100%;
-  min-width: 0;          /* ★ flex 컨테이너 안에서 줄어들 수 있게 */
-  padding: 20px 22px 40px;
-  box-sizing: border-box;
-}
+:root{ --line:#e8ecf6; --muted:#6b7280; --ink:#111827; }
+.wrap{ padding:14px }
 
-/* 상단바 */
-.topbar{
-  display:flex; align-items:flex-end; justify-content:space-between; gap:16px;
-  margin-bottom:16px; padding:18px 18px 16px; border:1px solid #e7edf7; border-radius:16px;
-  background: radial-gradient(800px 260px at 8% 0%, #eef6ff 0%, transparent 60%), linear-gradient(180deg,#fff,#f9fbff);
-  box-shadow: 0 10px 24px rgba(15,23,42,.05);
+/* 헤더 */
+.hero{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px; border-radius:16px;
+  background:linear-gradient(135deg,#f7faff,#f0f6ff);
+  border:1px solid #eaf0ff; margin-bottom:12px;
 }
-.titles h1{ margin:0; font-size:20px; font-weight:800; letter-spacing:.2px }
-.titles .sub{ margin:4px 0 0; color:#6b7280; font-size:12px }
-.actions{ display:flex; align-items:center; gap:10px }
-.search{
-  display:flex; align-items:center; gap:8px; padding:8px 10px; width:240px;
-  border:1px solid #e1e8f5; border-radius:12px; background:#fff; color:#6b7280;
-}
-.search svg{ width:18px; height:18px }
-.search input{ border:0; outline:none; flex:1; font-size:14px; background:transparent; color:#0f172a }
-.select{ height:36px; border-radius:10px; border:1px solid #e1e8f5; background:#fff; padding:0 10px }
+.hero h2{ margin:0; font-size:18px; font-weight:800; color:var(--ink) }
+.hero p{ margin:4px 0 0; color:var(--muted); font-size:12px }
 
-/* 카드/테이블 */
-.card{ border:1px solid #e7edf7; border-radius:16px; background:#fff; box-shadow: 0 12px 28px rgba(15,23,42,.05) }
-.table{ padding:8px; overflow-x:auto; }
+/* 툴바 */
+.toolbar{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap }
+.search{ flex:1 1 360px; height:40px; border-radius:12px; border:1px solid var(--line); padding:0 14px }
+.search:focus{ box-shadow:0 0 0 3px rgba(37,99,235,.1); border-color:#cfe0ff }
+.pills{ display:flex; gap:8px; flex-wrap:wrap }
+.pill{ display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--line); background:#fff; border-radius:20px; font-weight:700 }
+.pill select{ border:0; background:transparent; outline:none; font-weight:700 }
+.pill.ghost{ background:#f7faff } .pill.ghost:hover{ background:#eef5ff }
 
-/* ★ 쿠폰 페이지의 grid 규격/간격에 맞춤 */
-.table-head, .table-row{
-  display:grid;
-  grid-template-columns:
-    70px                           /* # */
-    minmax(120px, 1fr)             /* 아이디 */
-    minmax(110px, 0.8fr)           /* 이름 */
-    minmax(260px, 2fr)             /* 이메일 */
-    minmax(150px, 1.2fr)           /* 전화 */
-    minmax(120px, 0.9fr)           /* 역할 */
-    minmax(120px, 0.9fr)           /* 상태 */
-    minmax(180px, 1.2fr)           /* 가입일 */
-    110px;                         /* 액션 */
-  align-items:center;
-  column-gap:22px;                 /* 쿠폰 페이지와 동일 간격 */
-  padding:12px;
-  min-width: 980px;                /* 좁아지면 가로 스크롤 */
-}
-@media (max-width: 960px){
-  .table-head, .table-row{ min-width: 860px; }
-}
-.table-head{ position:sticky; top:0; background:#f9fbff; z-index:1; border-radius:12px; font-weight:700; color:#475569 }
-.table-row{ border-top:1px solid #f0f4fb }
-.table-row:hover{ background:#fcfdff }
-
+/* 테이블 */
+.card{ background:#fff; border:1px solid var(--line); border-radius:12px }
+.table-card{ overflow:auto }
+.table{ width:100%; border-collapse:collapse }
+th,td{ padding:12px 12px; border-bottom:1px solid #f1f4fb; text-align:left; font-size:14px }
+th{ color:#475569; font-weight:800; background:#fbfdff }
 .center{text-align:center}
-.muted{ color:#6b7280 }
-.ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.actions-col{ display:flex; align-items:center; justify-content:center; gap:6px }
+.muted{ color:var(--muted) }
+.empty{ text-align:center; color:#94a3b8; padding:18px 0 }
+.loading{ padding:14px; text-align:center }
 
-/* 드롭다운/버튼 */
-.pill-select{
-  height:32px; border-radius:999px; border:1px solid #e4e9f6; background:#fff; padding:0 12px;
-  font-weight:700; color:#0f172a;
-}
-.state select{
-  height:32px; border-radius:999px; padding:0 12px; font-weight:700; border:1px solid transparent;
-}
-.state[data-s="ACTIVE"]   select{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }   /* 초록 */
-.state[data-s="LOCKED"]   select{ background:#fff7ed; color:#92400e; border-color:#fed7aa; }   /* 주황 */
-.state[data-s="INACTIVE"] select{ background:#fef2f2; color:#991b1b; border-color:#fecaca; }   /* 빨강 */
+/* 상태 뱃지 */
+.badge{ display:inline-block; margin-right:8px; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #e5e7eb; background:#f9fafb }
+.badge[data-variant="ACTIVE"]{ background:#ecfdf5; border-color:#a7f3d0 }
+.badge[data-variant="LOCKED"]{ background:#fff7ed; border-color:#fed7aa }
+.badge[data-variant="INACTIVE"]{ background:#fef2f2; border-color:#fecaca }
 
-.btn{ padding:6px 10px; border-radius:10px; border:0; cursor:pointer; background:#475569; color:#fff }
-.btn.danger{ background:#ef4444 }
-.btn.sm{ font-size:12px }
-
-.empty{ text-align:center; color:#94a3b8; padding:26px }
-.skeleton-wrap{ padding:8px 12px }
-.skeleton-row{
-  height:46px; border-radius:10px; margin:6px 0;
-  background: linear-gradient(90deg, #f3f6fb 25%, #eaf0f9 37%, #f3f6fb 63%);
-  background-size: 400% 100%; animation: shimmer 1.2s infinite
-}
-@keyframes shimmer{ 0%{ background-position:100% 0 } 100%{ background-position:0 0 } }
+/* 버튼 */
+.btn{ height:30px; padding:0 10px; border-radius:10px; border:1px solid #cfe0ff; background:#f5f9ff; font-weight:700; cursor:pointer; }
+.btn.xs{ height:28px; font-size:12px }
+.btn.danger{ background:#fff5f5; border-color:#fecaca }
+.btn.danger:hover{ background:#ffe9e9 }
 
 /* 토스트 */
-.toast{
-  position:fixed; right:18px; bottom:18px; padding:10px 14px; border-radius:12px;
-  color:#0f172a; background:#fff; border:1px solid #e7edf7; box-shadow:0 10px 26px rgba(15,23,42,.18);
-  font-weight:700; z-index:60;
-}
-
+.toast{ position:fixed; right:18px; bottom:18px; padding:10px 14px; border-radius:12px; color:#0f172a; background:#fff; border:1px solid #e7edf7; box-shadow:0 10px 26px rgba(15,23,42,.18); font-weight:700; z-index:60 }
 </style>

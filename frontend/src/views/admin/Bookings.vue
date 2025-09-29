@@ -1,123 +1,130 @@
 <!-- src/views/admin/Bookings.vue -->
 <template>
-  <div class="p-4 space-y-4">
-    <h2 class="text-xl font-bold">예약 관리</h2>
+  <section class="wrap wrap--wide">
+    <!-- 헤더 -->
+    <div class="hero">
+      <div>
+        <h2>예약 관리</h2>
+        <p>필터로 상태/호텔/기간을 빠르게 조회하세요.</p>
+      </div>
+    </div>
 
     <!-- 필터 -->
-    <form class="grid grid-cols-1 md:grid-cols-6 gap-2 items-end" @submit.prevent="reload(0)">
-      <div>
-        <label class="block text-xs text-gray-600 mb-1">상태</label>
-        <select v-model="q.status" class="w-full border rounded px-2 py-1">
+    <form class="toolbar" @submit.prevent="reload(0)">
+      <div class="pill">
+        <label class="lbl">상태</label>
+        <select v-model="q.status">
           <option :value="null">전체</option>
-          <!-- ✅ 백엔드 상태 철자 통일: CANCELLED -->
-          <option value="CONFIRMED">CONFIRMED</option>
-          <option value="CANCELLED">CANCELLED</option>
-          <option value="PENDING">PENDING</option>
+          <option value="CONFIRMED">예약 확정</option>
+          <option value="CANCELLED">예약 취소</option>
+          <option value="PENDING">대기 중</option>
         </select>
       </div>
 
-      <!-- 호텔 이름 필터 -->
-      <div class="md:col-span-2">
-        <label class="block text-xs text-gray-600 mb-1">호텔 이름</label>
-        <input v-model.trim="q.hotelName" class="w-full border rounded px-2 py-1" placeholder="예: 콘래드, 신라, 제주…" />
+      <div class="pill grow">
+        <label class="lbl">호텔 이름</label>
+        <input v-model.trim="q.hotelName" placeholder="예: 콘래드, 신라, 제주…" />
       </div>
 
-      <div>
-        <label class="block text-xs text-gray-600 mb-1">로그인ID</label>
-        <input v-model.trim="q.loginId" class="w-full border rounded px-2 py-1" placeholder="user 검색" />
+      <div class="pill">
+        <label class="lbl">로그인ID</label>
+        <input v-model.trim="q.loginId" placeholder="user 검색" />
       </div>
-      <div>
-        <label class="block text-xs text-gray-600 mb-1">체크인 From</label>
-        <input v-model="q.from" type="date" class="w-full border rounded px-2 py-1" />
+
+      <div class="pill">
+        <label class="lbl">체크인 From</label>
+        <input v-model="q.from" type="date" />
       </div>
-      <div>
-        <label class="block text-xs text-gray-600 mb-1">체크인 To</label>
-        <input v-model="q.to" type="date" class="w-full border rounded px-2 py-1" />
+
+      <div class="pill">
+        <label class="lbl">체크인 To</label>
+        <input v-model="q.to" type="date" />
       </div>
-      <div class="flex gap-2">
-        <button type="submit" class="border rounded px-3 py-2 bg-black text-white">검색</button>
-        <button type="button" @click="resetFilters" class="border rounded px-3 py-2">초기화</button>
+
+      <div class="pills-right">
+        <button type="submit" class="btn primary">검색</button>
+        <button type="button" @click="resetFilters" class="btn ghost">초기화</button>
       </div>
     </form>
 
     <!-- 표 -->
-    <div class="border rounded overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b">
+    <div class="card table-card no-h-scroll">
+      <table class="table">
+        <!-- 열 폭 고정: 칸 흔들림 방지 -->
+        <colgroup>
+          <col style="width:90px" />   <!-- 예약번호 -->
+          <col style="width:180px" />  <!-- 고객 -->
+          <col style="width:200px" />  <!-- 호텔 -->
+          <col style="width:160px" />  <!-- 객실 -->
+          <col style="width:130px" />  <!-- 체크인 -->
+          <col style="width:80px" />   <!-- 박수 -->
+          <col style="width:150px" />  <!-- 금액 -->
+          <col style="width:120px" />  <!-- 상태 -->
+          <col style="width:100px" />  <!-- 영수증 -->
+          <col style="width:100px" />  <!-- 관리 -->
+        </colgroup>
+
+        <thead>
           <tr>
-            <th class="p-2 text-left">예약번호</th>
-            <th class="p-2 text-left">고객</th>
-            <th class="p-2 text-left">호텔</th>
-            <th class="p-2 text-left">객실</th>
-            <th class="p-2 text-left">체크인</th>
-            <th class="p-2 text-left">박수</th>
-            <th class="p-2 text-right">금액</th>
-            <th class="p-2 text-center">상태</th>
-            <th class="p-2 text-center">영수증</th>
-            <!-- ✅ 관리(취소) 컬럼 추가 -->
-            <th class="p-2 text-center">관리</th>
+            <th class="th-left">예약번호</th>
+            <th class="th-left">고객</th>
+            <th class="th-left">호텔</th>
+            <th class="th-left">객실</th>
+            <th class="th-center">체크인</th>
+            <th class="th-center">박수</th>
+            <th class="th-right">금액</th>
+            <th class="th-center">상태</th>
+            <th class="th-center">영수증</th>
+            <th class="th-center">관리</th>
           </tr>
         </thead>
+
         <tbody>
-          <tr v-for="b in bookings" :key="b.bookingId" class="border-b">
-            <td class="p-2">#{{ b.bookingId }}</td>
-            <td class="p-2">
-              <div class="font-medium">{{ b.userName || '-' }}</div>
-              <div class="text-xs text-gray-500">{{ b.userLoginId }}</div>
+          <tr v-for="b in bookings" :key="b.bookingId">
+            <td class="td-left">#{{ b.bookingId }}</td>
+            <td class="td-left">
+              <div class="b ellipsis">{{ b.userName || '-' }}</div>
+              <div class="muted text-xs ellipsis">{{ b.userLoginId }}</div>
             </td>
-            <td class="p-2">{{ b.hotelName }}</td>
-            <td class="p-2">{{ b.roomTypeName }}</td>
-            <td class="p-2">{{ b.checkIn || '-' }}</td>
-            <td class="p-2">{{ b.nights ?? '-' }}</td>
-            <td class="p-2 text-right">
-              {{ nfmt(b.totalAmount) }} {{ b.currency }}
+            <td class="td-left ellipsis">{{ b.hotelName }}</td>
+            <td class="td-left ellipsis">{{ b.roomTypeName }}</td>
+            <td class="td-center">{{ b.checkIn || '-' }}</td>
+            <td class="td-center">{{ b.nights ?? '-' }}</td>
+            <td class="td-right nowrap">{{ nfmt(b.totalAmount) }} {{ b.currency }}</td>
+            <td class="td-center">
+              <span :class="badgeClass(b.status)">{{ statusLabel(b.status) }}</span>
             </td>
-            <td class="p-2 text-center">
-              <span :class="badgeClass(b.status)">{{ b.status }}</span>
+            <td class="td-center">
+              <a v-if="b.receiptUrl" :href="b.receiptUrl" target="_blank" rel="noopener" class="link">보기</a>
+              <span v-else class="muted">-</span>
             </td>
-            <td class="p-2 text-center">
-              <a v-if="b.receiptUrl" :href="b.receiptUrl" target="_blank" rel="noopener" class="text-blue-600 underline">보기</a>
-              <span v-else class="text-gray-400">-</span>
-            </td>
-            <!-- ✅ 취소 버튼 -->
-            <td class="p-2 text-center">
+            <td class="td-center">
               <button
-                class="px-2 py-1 border rounded text-red-600 border-red-300 hover:bg-red-50 disabled:opacity-50"
+                class="btn danger xs"
                 :disabled="!canCancel(b) || loading"
                 @click="openCancel(b.bookingId)"
-              >
-                취소
-              </button>
+              >취소</button>
             </td>
           </tr>
+
           <tr v-if="!loading && !bookings.length">
-            <td colspan="10" class="p-4 text-center text-gray-500">데이터가 없습니다.</td>
+            <td colspan="10" class="empty">데이터가 없습니다.</td>
           </tr>
           <tr v-if="loading">
-            <td colspan="10" class="p-4 text-center text-gray-400">불러오는 중…</td>
+            <td colspan="10" class="loading">불러오는 중…</td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <!-- 페이지네이션 -->
-    <div class="flex items-center justify-between">
-      <div class="text-sm text-gray-600">
-        총 {{ totalElements.toLocaleString() }}건
-      </div>
-      <div class="flex items-center gap-2">
-        <button class="px-3 py-1 border rounded"
-                :disabled="page<=0 || loading"
-                @click="reload(page-1)">
-          이전
-        </button>
-        <span class="text-sm">페이지 {{ page+1 }} / {{ totalPages }}</span>
-        <button class="px-3 py-1 border rounded"
-                :disabled="page>=totalPages-1 || loading"
-                @click="reload(page+1)">
-          다음
-        </button>
-        <select v-model.number="size" @change="reload(0)" class="border rounded px-2 py-1">
+    <div class="pager">
+      <div class="muted">총 {{ totalElements.toLocaleString() }}건</div>
+      <div class="controls">
+        <button class="btn ghost" :disabled="page<=0 || loading" @click="reload(page-1)">이전</button>
+        <span class="muted">페이지 {{ page+1 }} / {{ totalPages }}</span>
+        <button class="btn ghost" :disabled="page>=totalPages-1 || loading" @click="reload(page+1)">다음</button>
+        <select v-model.number="size" @change="reload(0)" class="sel">
           <option :value="10">10</option>
           <option :value="20">20</option>
           <option :value="50">50</option>
@@ -125,23 +132,18 @@
       </div>
     </div>
 
-    <!-- 에러 -->
-    <p v-if="errorMsg" class="text-red-600 text-sm">{{ errorMsg }}</p>
+    <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
 
-    <!-- ✅ 취소 모달 -->
-    <CancelDialog
-      :open="cancelOpen"
-      @close="cancelOpen=false"
-      @submit="submitCancel"
-    />
-  </div>
+    <!-- 취소 모달 -->
+    <CancelDialog :open="cancelOpen" @close="cancelOpen=false" @submit="submitCancel" />
+  </section>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { get } from '@/api/_http'
-import { cancelBooking } from '@/api/bookings'            // ★ 공용 취소 API 재사용
-import CancelDialog from '@/components/common/CancelDialog.vue' // ★ 모달
+import { cancelBooking } from '@/api/bookings'
+import CancelDialog from '@/components/common/CancelDialog.vue'
 
 const bookings = ref([])
 const loading = ref(false)
@@ -160,15 +162,21 @@ const q = ref({
   to: ''
 })
 
+const statusLabel = (s) => {
+  const map = {
+    CONFIRMED: '예약 확정',
+    PENDING:   '대기 중',
+    CANCELLED: '예약 취소',
+  }
+  return map[s] ?? s
+}
+
 const nfmt = (n) => (n == null ? '-' : Number(n).toLocaleString('ko-KR'))
 
-// ✅ 상태 배지: CANCELLED 반영
 const badgeClass = (s) => [
-  'inline-block px-2 py-0.5 rounded text-xs font-semibold',
-  s === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
-  s === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-  s === 'PENDING'   ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-700'
+  'badge',
+  s === 'CONFIRMED' ? 'ok' :
+  s === 'CANCELLED' ? 'no' : 'warn'
 ].join(' ')
 
 function buildParams(nextPage) {
@@ -188,7 +196,6 @@ async function reload(nextPage = page.value) {
   errorMsg.value = ''
   try {
     const query = buildParams(nextPage)
-    // 백엔드 라우팅: /api/admin/bookings
     const res = await get(`/admin/bookings?${query}`)
     bookings.value = Array.isArray(res?.content) ? res.content : []
     page.value = Number(res?.number ?? nextPage)
@@ -197,7 +204,6 @@ async function reload(nextPage = page.value) {
     totalElements.value = Number(res?.totalElements ?? 0)
   } catch (e) {
     console.error(e)
-    // fetch 래퍼의 에러 포맷(JSON string) 방어 처리
     let msg = '불러오기 실패'
     try {
       const j = JSON.parse(e?.message || '{}')
@@ -217,10 +223,6 @@ function resetFilters() {
   reload(0)
 }
 
-/* =========================
-   취소 버튼/모달
-   - 어드민 컷오프: 체크인 당일 23:59까지 허용 (백엔드에서도 최종 검증)
-   ========================= */
 const cancelOpen = ref(false)
 const cancelTargetId = ref(null)
 
@@ -249,16 +251,127 @@ async function submitCancel({ reason }) {
   }
 }
 
-/* UX용 프론트 가드 (백엔드가 최종 판단) */
 function canCancel(b) {
   if (!b || b.status === 'CANCELLED') return false
   if (!b.checkIn) return true
-  // b.checkIn은 'YYYY-MM-DD' 가정
   const today = new Date()
-  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())     // 오늘 0시
-  const ci  = new Date(b.checkIn)                                                 // 체크인 0시
-  return t0 <= ci // 어드민: 체크인 당일까지 가능
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const ci  = new Date(b.checkIn)
+  return t0 <= ci
 }
 
 onMounted(() => reload(0))
 </script>
+
+<style scoped>
+:root{ --line:#e8ecf6; --card:#fff; --muted:#6b7280; --ink:#111827; }
+
+/* 레이아웃 */
+.wrap{ padding:14px }
+.wrap--wide{ width:100% !important; max-width:none !important; margin:0 !important; }
+
+/* 헤더 */
+.hero{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px; border-radius:16px;
+  background:linear-gradient(135deg,#f7faff,#f0f6ff);
+  border:1px solid #eaf0ff; margin-bottom:12px;
+}
+.hero h2{ margin:0; font-size:18px; font-weight:800; color:var(--ink) }
+.hero p{ margin:4px 0 0; color:#6b7280; font-size:12px }
+
+/* 툴바 */
+.toolbar{
+  display:grid; grid-template-columns: repeat(6, minmax(0,1fr));
+  gap:10px; align-items:end; margin-bottom:10px; flex-wrap:wrap;
+}
+.pill{
+  display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--line);
+  background:#fff; border-radius:12px;
+}
+.pill.grow{ grid-column: span 2 / span 2; }
+@media (max-width: 980px){
+  .toolbar{ grid-template-columns: 1fr 1fr; }
+  .pill.grow{ grid-column: span 2 / span 2; }
+}
+.lbl{ font-size:12px; color:#6b7280 }
+.pill input, .pill select{
+  height:36px; border:1px solid #e1e8f5; border-radius:10px; padding:0 10px; outline:none;
+}
+.pill input:focus, .pill select:focus{
+  box-shadow:0 0 0 3px rgba(37,99,235,.12); border-color:#cfe0ff
+}
+.pills-right{ display:flex; gap:8px; align-items:center }
+
+/* 버튼 */
+.btn{
+  height:36px; padding:0 14px; border-radius:10px; font-weight:800; cursor:pointer; border:1px solid #cfe0ff;
+  background:#f5f9ff;
+}
+.btn.primary{ color:#fff; background:linear-gradient(135deg,#3b82f6,#2563eb); border-color:transparent; box-shadow:0 8px 20px rgba(37,99,235,.25) }
+.btn.ghost{ background:#fff; color:#0f172a }
+.btn.danger{ color:#b91c1c; background:#fff5f5; border-color:#fecaca }
+.btn.danger:disabled{ opacity:.5; }
+.btn.xs{ height:28px; font-size:12px; border-radius:10px }
+
+/* 카드/테이블 */
+.card{ background:#fff; border:1px solid var(--line); border-radius:12px }
+.table-card{ overflow:auto }
+.no-h-scroll{ overflow-x:hidden }
+
+/* 테이블: 칸 정렬 안정화 */
+.table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed; /* 열폭 고정 */
+}
+th,td{
+  padding:12px;
+  border-bottom:1px solid #f1f4fb;
+  font-size:14px;
+  vertical-align:middle; /* 가운데 정렬 */
+  line-height:1.25;
+}
+th{
+  color:#475569; font-weight:800; background:#fbfdff;
+}
+
+/* 헤더/본문 정렬 클래스 */
+.th-left{ text-align:left }
+.th-center{ text-align:center }
+.th-right{ text-align:right }
+.td-left{ text-align:left }
+.td-center{ text-align:center }
+.td-right{ text-align:right }
+
+/* 글자 줄바꿈/말줄임 */
+th, th *{ white-space:nowrap; word-break:keep-all }
+td{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.nowrap{ white-space:nowrap }
+.ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+.b{ font-weight:700 } .muted{ color:#6b7280 } .text-xs{ font-size:12px }
+.link{ color:#2563eb; text-decoration:underline }
+
+/* 상태 배지 */
+.badge{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:72px; /* 글자 길이 달라도 칸 맞춤 */
+  padding:4px 10px;
+  border-radius:999px; font-size:12px; font-weight:800;
+  border:1px solid #e5e7eb; background:#f9fafb;
+}
+.badge.ok{ background:#ecfdf5; border-color:#a7f3d0; color:#065f46 }
+.badge.no{ background:#fef2f2; border-color:#fecaca; color:#991b1b }
+.badge.warn{ background:#fff7ed; border-color:#fed7aa; color:#92400e }
+
+/* 빈 상태/로딩 */
+.empty{ text-align:center; color:#94a3b8; padding:18px 0 }
+.loading{ text-align:center; color:#94a3b8; padding:18px 0 }
+
+/* 페이지네이션 */
+.pager{ display:flex; align-items:center; justify-content:space-between; margin-top:10px }
+.controls{ display:flex; align-items:center; gap:8px }
+.sel{ height:32px; border:1px solid #e1e8f5; border-radius:10px; padding:0 8px }
+.err{ color:#e11d48; font-size:13px; margin-top:6px }
+</style>
