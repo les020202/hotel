@@ -131,7 +131,7 @@ onMounted(load)
 <template>
   <div class="space-y-4">
     <div class="flex items-center gap-3">
-      <div class="text-xl font-bold">객실 현황</div>
+      <div class="title"><h1 class="text-xl font-bold">객실 현황</h1></div>
       <input type="date" v-model="date" class="border rounded-lg px-3 py-2" @change="load" />
       <select v-model="floor" class="border rounded-lg px-3 py-2">
         <option value="">전체 층</option>

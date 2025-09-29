@@ -1,7 +1,48 @@
 <!-- src/views/owner/HotelBookings.vue (예시 파일명) -->
 <template>
   <div class="p-4 space-y-4">
-    <h2 class="text-xl font-bold">내 호텔 예약 내역</h2>
+      <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">내 호텔 예약 내역</h1></div>
+    </header>
+
+    <!-- [ADD] 검색/필터 바 -->
+    <div class="flex flex-col gap-2 md:flex-row md:items-end md:gap-3">
+      <div class="flex-1">
+        <label class="block text-xs text-gray-500 mb-1">검색어 (예약번호/고객/아이디/객실)</label>
+        <input
+          v-model.trim="q"
+          type="text"
+          class="w-full border rounded-lg p-2"
+          placeholder="예: 1024 / 홍길동 / standard"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">상태</label>
+        <select v-model="status" class="w-40 border rounded-lg p-2">
+          <option value="">전체</option>
+          <option value="CONFIRMED">확정</option>
+          <option value="PENDING">대기</option>
+          <option value="CANCELLED">취소</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">체크인(시작)</label>
+        <input v-model="from" type="date" class="border rounded-lg p-2 w-40" />
+      </div>
+
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">체크인(종료)</label>
+        <input v-model="to" type="date" class="border rounded-lg p-2 w-40" />
+      </div>
+
+      <div class="flex gap-2">
+        <button class="px-3 py-2 rounded-lg border" @click="applyNow++">검색</button>
+        <button class="px-3 py-2 rounded-lg border" @click="resetFilters">초기화</button>
+      </div>
+    </div>
+    <!-- [/ADD] -->
 
     <div class="border rounded">
       <table class="w-full text-sm">
@@ -17,7 +58,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in bookings" :key="r.bookingId" class="border-b">
+          <!-- [MOD] bookings → filteredBookings 로 변경 -->
+          <tr v-for="r in filteredBookings" :key="r.bookingId" class="border-b">
             <td class="p-2">#{{ r.bookingId }}</td>
             <td class="p-2">
               <div class="font-medium">{{ r.userName || '-' }}</div>
@@ -57,7 +99,7 @@
             </td>
           </tr>
 
-          <tr v-if="!loading && !bookings.length">
+          <tr v-if="!loading && !filteredBookings.length">
             <td colspan="7" class="p-4 text-center text-gray-500">예약이 없습니다.</td>
           </tr>
           <tr v-if="loading">
@@ -79,7 +121,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { get } from '@/api/_http'
 import { cancelBooking } from '@/api/bookings'
@@ -185,4 +227,56 @@ async function load() {
 }
 
 onMounted(load)
+
+/* ---------------------------- */
+/* [ADD] 검색/필터 로직 (프론트) */
+/* ---------------------------- */
+const q = ref('')          // 키워드
+const status = ref('')     // CONFIRMED | PENDING | CANCELLED | ''
+const from = ref('')       // YYYY-MM-DD
+const to = ref('')         // YYYY-MM-DD
+
+// "검색" 버튼 누르면 즉시 재평가되도록 트리거
+const applyNow = ref(0)
+
+function resetFilters() {
+  q.value = ''
+  status.value = ''
+  from.value = ''
+  to.value = ''
+  applyNow.value++ // 즉시 반영
+}
+
+// 소문자 비교용
+const lc = (s) => (s ?? '').toString().toLowerCase()
+
+const filteredBookings = computed(() => {
+  // applyNow를 의존성에 추가해서 검색 버튼 클릭 시 즉시 재계산
+  void applyNow.value
+
+  const kw = lc(q.value).trim()
+  const st = (status.value || '').toUpperCase()
+  const fromD = from.value || ''
+  const toD = to.value || ''
+
+  return (bookings.value || []).filter(r => {
+    // 상태 필터
+    if (st && (r.status || '').toUpperCase() !== st) return false
+
+    // 기간 필터 (체크인 기준)
+    const cin = normalizeDate(r.checkIn)
+    if (fromD && (!cin || cin < fromD)) return false
+    if (toD && (!cin || cin > toD)) return false
+
+    // 키워드 필터
+    if (!kw) return true
+    const hay = [
+      String(r.bookingId || ''),
+      r.userName || '',
+      r.userLoginId || '',
+      r.roomTypeName || ''
+    ].map(lc).join(' ')
+    return hay.includes(kw)
+  })
+})
 </script>

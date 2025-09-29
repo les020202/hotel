@@ -111,7 +111,9 @@ watch(date, () => loadArrivals())
 
 <template>
   <div>
-    <h1 class="text-xl font-bold">호실 배정</h1>
+    <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">호실 배정</h1></div>
+    </header>
 
     <!-- 조회 필터 -->
     <div class="mt-4 flex gap-3 items-end">
@@ -238,3 +240,14 @@ watch(date, () => loadArrivals())
     </div>
   </div>
 </template>
+
+<style>
+/* 상단 바 */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.title { font-weight: 800; font-size: 18px; }
+</style>

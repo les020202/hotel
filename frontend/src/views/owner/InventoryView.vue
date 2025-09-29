@@ -255,7 +255,10 @@ watch(()=>route.params.hotelId, async v=>{
 
 <template>
   <div>
-    <h1 class="text-xl font-bold">예약 캘린더</h1>
+    <header class="topbar">
+      <div class="title"><h1 class="text-xl font-bold">예약 캘린더</h1></div>
+    </header>
+
 
     <!-- 탭 / 등록 -->
     <div class="mt-3 flex items-center gap-2">
