@@ -84,7 +84,7 @@ watch(() => route.params.hotelId, (v) => {
             class="block px-3 py-2 rounded hover:bg-gray-100"
             :class="{'pointer-events-none opacity-50': !currentHotelId}"
           >
-            재고 캘린더
+            예약 캘린더
           </RouterLink>
           <RouterLink
             :to="currentHotelId ? `/owner/hotels/${currentHotelId}/bookings` : '/owner'"

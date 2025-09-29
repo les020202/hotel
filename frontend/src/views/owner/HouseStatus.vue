@@ -170,8 +170,8 @@ onMounted(load)
 
         <!-- 표기: 하우스키핑 → 상태 (표시는 displayHk만 사용) -->
         <div class="text-xs">
-          하우스키핑: <b>{{ displayHk(r) }}</b>
-          · 상태: <b>{{ r.status || 'ACTIVE' }}</b>
+          현재 기준: <b>{{ displayHk(r) }}</b>
+          <p> 상태: <b>{{ r.status || 'ACTIVE' }}</b></p>
         </div>
 
         <div class="flex gap-2 flex-wrap">
