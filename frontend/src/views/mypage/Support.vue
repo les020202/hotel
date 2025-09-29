@@ -1,5 +1,10 @@
 <template>
   <div class="support">
+    <!-- 상단 제목: 좌측 정렬 -->
+    <div class="topbar">
+      <div class="topbar-title">고객지원</div>
+    </div>
+
     <!-- 상단 바: 아이콘 + 텍스트, 오른쪽 영업시간 -->
     <div class="bar">
       <div class="items">
@@ -38,6 +43,14 @@
 <style scoped>
 /* 전체 레이아웃: 세로 정렬 */
 .support { display: flex; flex-direction: column; gap: 16px; }
+
+/* === 상단 제목 바: 좌측 정렬 === */
+.topbar {
+  height: 60px; display: flex; align-items: center; gap: 8px;
+  padding: 0 18px; border-bottom: 1px solid #f1f5f9;
+  background: #fff; border-radius: 12px;
+}
+.topbar-title { font-weight: 800; font-size: 20px; text-align: left; }
 
 /* 상단 안내 바 */
 .bar {

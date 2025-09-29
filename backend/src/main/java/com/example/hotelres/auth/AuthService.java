@@ -26,18 +26,17 @@ public class AuthService {
         u.setName(req.getName());
         u.setEmail(req.getEmail());
         u.setPhone(req.getPhone());
-     
-
         u.setGender(req.getGender());
         u.setBirthDate(req.getBirthDate());
 
-        // ✅ 신규가입 쿠폰 자동 지급
-        try {
-            userCouponService.grantWelcomeCouponIfNeeded(u.getId());
-            return users.save(u);
-        } catch (Exception ignore) { }
+        // ✅ 먼저 저장해서 PK 확보
+        u = users.save(u);
+        users.flush();                 // PK 즉시 확정 (안전)
 
-        return users.save(u);
+        // ✅ 확보한 PK로 발급 (SecurityContext 의존 X)
+        userCouponService.grantWelcomeCouponIfNeeded(u.getId());
+
+        return u;
     }
 
      // 이메일 기반 비밀번호 재설정

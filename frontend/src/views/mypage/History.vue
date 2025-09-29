@@ -1,7 +1,10 @@
 <!-- src/views/mypage/History.vue -->
 <template>
-  <div class="history">
-    <h2>예약내역</h2>
+  <div class="history page">
+    <!-- ✅ 쿠폰/Account와 동일한 상단 제목 바 -->
+    <div class="topbar">
+      <div class="topbar-title">예약내역</div>
+    </div>
 
     <p v-if="loading" class="muted">불러오는 중…</p>
     <p v-else-if="!rows.length" class="muted">예약 내역이 없습니다.</p>
@@ -41,9 +44,9 @@
           <button
             class="btn"
             type="button"
-            :disabled="!r.ticketAvailable"
-            @click="openTicket(r.bookingId)"
-            title="티켓 보기 / 인쇄"
+            :disabled="!canOpenTicket(r)"
+            @click="openTicket(r)"
+            :title="canOpenTicket(r) ? '티켓 보기 / 인쇄' : '취소된 예약은 티켓을 제공하지 않습니다.'"
           >
             Download Ticket
           </button>
@@ -103,6 +106,15 @@ function toKStatus(st) {
   if (s === 'PENDING') return '대기'
   return st
 }
+function isCanceled(st) {
+  const s = String(st || '').toUpperCase()
+  return s === 'CANCELED' || s === 'CANCELLED'
+}
+
+/** 취소 예약은 티켓 열기 비활성화 */
+function canOpenTicket(row) {
+  return !!(row && row.ticketAvailable && !isCanceled(row.status))
+}
 
 async function fetchPage(p, s) {
   // GET /api/my/bookings?page={p}&size={s}
@@ -138,8 +150,12 @@ function loadMore() {
   load(false)
 }
 
-function openTicket(id) {
-  router.push({ name: 'MyBookingTicket', params: { id } })
+function openTicket(row) {
+  if (!canOpenTicket(row)) {
+    alert('취소된 예약은 티켓을 제공하지 않습니다.')
+    return
+  }
+  router.push({ name: 'MyBookingTicket', params: { id: row.bookingId } })
 }
 
 function goDetail(id) {
@@ -150,8 +166,17 @@ onMounted(() => load(true))
 </script>
 
 <style scoped>
-.history { max-width: 960px; margin: 24px auto; padding: 0 12px; }
-h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+/* 페이지 공통 여백 + topbar */
+.page { max-width: 960px; margin: 0 auto; padding: 16px 12px; }
+
+/* ✅ 쿠폰/Account와 동일 스타일의 상단 제목 바 */
+.topbar {
+  height: 60px; display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; border-bottom: 1px solid #f1f5f9;
+  margin: -16px -12px 12px; background: #fff; justify-content: flex-start;
+}
+.topbar-title { font-weight: 800; font-size: 20px; text-align: left; }
+
 .muted { color: #6b7280; }
 .error { color: #dc2626; margin-top: 10px; }
 

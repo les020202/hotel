@@ -1,8 +1,10 @@
-
 <!-- src/views/mypage/Account.vue -->
 <template>
-  <div class="account">
-    <h2>Account</h2>
+  <div class="account page">
+    <!-- ✅ 쿠폰 페이지와 동일 스타일의 상단 제목 바 -->
+    <div class="topbar">
+      <div class="topbar-title">Account</div>
+    </div>
 
     <div class="box">
       <!-- Name -->
@@ -480,13 +482,11 @@ async function save() {
 
     // 비밀번호 변경 처리
     if (edit.value.password) {
-      // 새 비밀번호 확인 검증
       if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
         errors.value.password = '새 비밀번호가 일치하지 않습니다.'
         saving.value = false
         return
       }
-      // 백엔드에 비밀번호 변경 요청
       await api.put('/users/me/password', {
         currentPassword: passwordForm.value.currentPassword,
         newPassword: passwordForm.value.newPassword
@@ -519,9 +519,20 @@ function togglePasswordEdit() {
 </script>
 
 <style scoped>
-/* 전체 레이아웃 */
-.account h2 { margin-bottom: 12px; }
+/* 페이지 공통 여백 */
+.page { max-width: 980px; margin: 0 auto; padding: 16px; }
+
+/* ✅ 쿠폰 페이지와 동일 스타일의 상단 제목 바 */
+.topbar {
+  height: 60px; display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; border-bottom: 1px solid #f1f5f9;
+  margin: -16px -16px 16px; background: #fff; justify-content: flex-start;
+}
+.topbar-title { font-weight: 800; font-size: 20px; text-align: left; }
+
+/* 콘텐츠 박스 */
 .box { border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
+
 /* 항목 줄 하나 */
 .row {
   display: grid; grid-template-columns: 160px 1fr auto; align-items: center;
@@ -610,10 +621,6 @@ input, select {
   padding: 10px 14px; border: 0; border-radius: 8px; background: #0a6; color: #fff; cursor: pointer;
 }
 .save[disabled]{ opacity:.6; cursor:not-allowed; }
-
-/* 쿠폰 버튼 */
-.coupon { margin-top: 16px; }
-.btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #0a6; color: #0a6; text-decoration: none; }
 
 /* 인라인 스피너 */
 .spinner--inline{ display:inline-block; width:14px; height:14px; border:2px solid #cbd5e1; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite; }

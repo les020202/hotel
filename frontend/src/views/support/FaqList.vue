@@ -2,9 +2,8 @@
   <div class="faq page">
     <!-- 🔝 상단 바 (공지사항과 동일 스타일) -->
     <div class="topbar">
-      <button class="icon" @click="$router.back()">‹</button>
+      <button class="icon" @click="$router.back()" aria-label="이전으로">‹</button>
       <div class="title">자주 묻는 질문</div>
-      <RouterLink to="/main" class="home-btn">Home</RouterLink>
     </div>
 
     <!-- 카테고리 (격자형, 항공 제외) -->
@@ -55,7 +54,7 @@ import api from '@/api/auth'
 const categories = [
   { label: '전체',        value: 'ALL' },
   { label: '숙소',        value: '숙소' },
-  { label: '쿠폰/포인트/코인', value: '쿠폰/포인트/코인' },
+  { label: '쿠폰/포인트/코인', value: '쿠폰' },
   { label: '결제/영수증',  value: '결제/영수증' },
   { label: '회원',        value: '회원' },
 ]
@@ -122,36 +121,32 @@ onMounted(() => fetchFaq(true))
   overflow: hidden;
 }
 
-/* 상단 바 (공지사항과 동일 스타일) */
+/* 상단 바: 뒤로가기 좌측 고정, 제목 중앙 */
 .topbar {
+  position: relative;
   height: 60px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 16px;
   border-bottom: 1px solid #f1f5f9;
+  background:#fff;
 }
 .icon {
+  position: absolute;
+  left: 16px;
   border: 0;
   background: transparent;
   font-size: 24px;
   cursor: pointer;
+  line-height: 1;
 }
 .title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   font-weight: 700;
   font-size: 18px;
-}
-.home-btn {
-  font-size: 14px;
-  color: #0a6;
-  text-decoration: none;
-  border: 1px solid #0a6;
-  padding: 6px 12px;
-  border-radius: 8px;
-}
-.home-btn:hover {
-  background: #0a6;
-  color: #fff;
+  line-height: 1;
 }
 
 /* 카테고리 표(3열) */

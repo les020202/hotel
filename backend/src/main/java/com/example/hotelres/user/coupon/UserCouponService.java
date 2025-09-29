@@ -83,7 +83,7 @@ public class UserCouponService {
      * - 회원가입 트랜잭션 오염 방지를 위해 신규 트랜잭션으로 분리(REQUIRES_NEW)
      * - 실패(중복/제약 등)는 false로만 반환, 예외 전파하지 않음
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public boolean grantWelcomeCouponIfNeeded(Long userId) {
     // props가 혹시라도 null이면 기본값으로 폴백
     String welcomeCode = (props.welcomeCode() == null || props.welcomeCode().isBlank())

@@ -1,9 +1,9 @@
 <!-- src/views/coupons/CouponPage.vue -->
 <template>
   <div class="coupon-page page">
+    <!-- 상단 제목: 좌측 정렬 -->
     <div class="topbar">
       <div class="topbar-title">내 쿠폰함</div>
-      <span class="spacer" aria-hidden="true"></span>
     </div>
 
     <!-- ✅ 쿠폰 코드 입력/지급 박스 -->
@@ -240,10 +240,16 @@ onMounted(load)
 
 <style scoped>
 .page { max-width: 980px; margin: 0 auto; padding: 16px; }
-.topbar { height: 60px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #f1f5f9; margin: -16px -16px 16px; background: #fff; }
+
+/* === 상단 제목 바: 좌측 정렬 === */
+.topbar {
+  height: 60px; display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; border-bottom: 1px solid #f1f5f9;
+  margin: -16px -16px 16px; background: #fff; justify-content: flex-start;
+}
+.topbar-title { font-weight: 800; font-size: 20px; text-align: left; }
+
 .icon { border: 0; background: transparent; font-size: 24px; cursor: pointer; }
-.topbar-title { font-weight: 700; font-size: 18px; flex: 1; text-align: center; }
-.spacer { display: inline-block; width: 34px; }
 
 /* ✅ claim box */
 .claim-box{
