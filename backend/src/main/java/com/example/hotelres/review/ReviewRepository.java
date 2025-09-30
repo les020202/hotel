@@ -158,4 +158,5 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
         Integer getOwner_report_count();
         LocalDateTime getLatest_report_at();
     }
+    Page<Review> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
 }

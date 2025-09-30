@@ -279,4 +279,21 @@ public class ReviewService {
                 .checkOut(bookingOpt.map(BookingEntity::getCheckOut).orElse(null))
                 .build();
     }
+    // ───────────────────────── queries ─────────────────────────
+    @Transactional(readOnly = true)
+    public ListResponse listMine(Long userId, int page, int size) {
+        Page<Review> p = reviewRepository.findByUserIdOrderByIdDesc(userId, PageRequest.of(page, size));
+        var items = p.getContent().stream().map(this::toItemWithPhotosAndMeta).toList();
+
+        // 내 리뷰는 특정 호텔의 평균/카운트가 의미 없으니 0으로 채움
+        return ListResponse.builder()
+                .content(items)
+                .totalElements(p.getTotalElements())
+                .totalPages(p.getTotalPages())
+                .number(p.getNumber())
+                .size(p.getSize())
+                .avgRating(0d)
+                .count(p.getTotalElements())
+                .build();
+    }
 }

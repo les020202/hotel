@@ -34,6 +34,7 @@
     <nav class="tabs">
       <RouterLink to="/mypage/account">계정</RouterLink>
       <RouterLink to="/mypage/history">내역</RouterLink>
+      <RouterLink to="/mypage/my-reviews">내 리뷰</RouterLink>
       <RouterLink to="/mypage/support">고객지원</RouterLink>
       <RouterLink to="/mypage/coupon">쿠폰함</RouterLink>
     </nav>

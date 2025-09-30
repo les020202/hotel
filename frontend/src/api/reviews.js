@@ -1,5 +1,6 @@
 // src/api/reviews.js
 import { get, post, upload, postMultipart, del } from '@/api/_http'
+import api from '@/api/auth';
 
 /**
  * 호텔 상세의 리뷰 목록 (페이지네이션)
@@ -83,3 +84,12 @@ export async function reportReview(reviewId, payload = {}) {
 
   return post(`/reviews/${reviewId}/report`, body)
 }
+
+export async function fetchMyReviews(page = 0, size = 10) {
+  const { data } = await api.get("/my/reviews", { params: { page, size } });
+  return data;
+}
+export async function deleteMyReview(reviewId) {
+  await api.delete(`/my/reviews/${reviewId}`);
+}
+

@@ -4,9 +4,8 @@ package com.example.hotelres.review;
 import com.example.hotelres.review.dto.ReviewDtos.EligibilityResponse;
 import com.example.hotelres.review.dto.ReviewDtos.ListResponse;
 import com.example.hotelres.review.dto.ReviewDtos.RatingResponse;
-import com.example.hotelres.review.dto.ReviewDtos.ReportRequest;
-import com.example.hotelres.review.dto.ReviewDtos.ReviewItem;
-import lombok.*;
+import com.example.hotelres.review.dto.ReviewDtos.ReportRequest; // ✅ 이 DTO를 사용
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,12 +51,12 @@ public class ReviewController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     @PreAuthorize("isAuthenticated()")
-    public ReviewItem create(@PathVariable Long hotelId,
-                             @RequestParam("bookingId") Long bookingId,
-                             @RequestParam("rating") Short rating,
-                             @RequestParam(value = "comment", required = false) String comment,
-                             @RequestParam(value = "photo", required = false) MultipartFile photo,
-                             @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
+    public com.example.hotelres.review.dto.ReviewDtos.ReviewItem create(@PathVariable Long hotelId,
+                                                                        @RequestParam("bookingId") Long bookingId,
+                                                                        @RequestParam("rating") Short rating,
+                                                                        @RequestParam(value = "comment", required = false) String comment,
+                                                                        @RequestParam(value = "photo", required = false) MultipartFile photo,
+                                                                        @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
 
         Long userId = userRepository.findIdByLoginId(loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
@@ -81,23 +80,40 @@ public class ReviewController {
         reviewService.report(id, userId, reason, detail, false);
     }
 
-    /** 내 리뷰 삭제 */
-    @DeleteMapping("/reviews/{id}")
+    /** 🔹 내 리뷰 목록 (숨김 포함) */
+    @GetMapping("/my/reviews")
+    @PreAuthorize("isAuthenticated()")
+    public ListResponse listMine(@RequestParam(defaultValue = "0") int page,
+                                 @RequestParam(defaultValue = "10") int size,
+                                 @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
+        Long userId = userRepository.findIdByLoginId(loginId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
+        return reviewService.listMine(userId, page, size);
+    }
+
+    /** 🔹 내 리뷰 삭제 (신규 경로) */
+    @DeleteMapping("/my/reviews/{id}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT) // 204
-    public void deleteMine(@PathVariable Long id,
-                           @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
+    public void deleteMineByMyPath(@PathVariable Long id,
+                                   @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
         Long userId = userRepository.findIdByLoginId(loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
         reviewService.deleteMine(id, userId);
     }
-    @Getter @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
-    public static class ReportRequest {
-        private String reason;        // 필수 아님: 서버에서 null/빈 값이면 "기타" 처리
-        private String detail;        // 선택
-        private String reporterType;  // 선택: 'USER' | 'OWNER' (보내지 않으면 서버 기본 USER)
+
+    /** (호환용) 기존 경로 유지하고 싶으면 남겨둠 */
+    @DeleteMapping("/reviews/{id}")
+    @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMineCompat(@PathVariable Long id,
+                                 @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
+        Long userId = userRepository.findIdByLoginId(loginId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
+        reviewService.deleteMine(id, userId);
     }
+
+    // ⛔️ 아래 내부 ReportRequest 클래스는 삭제하세요 (DTO 중복)
+    // @Getter @Setter ...
+    // public static class ReportRequest { ... }
 }
