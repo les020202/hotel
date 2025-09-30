@@ -1,6 +1,9 @@
 package com.example.hotelres.owner;
 
 import com.example.hotelres.owner.dto.OwnerHotelView;
+import com.example.hotelres.settlement.OwnerSettlementQueryService;
+import com.example.hotelres.settlement.WeeklySettlementDTO;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,7 +20,7 @@ import java.util.Map;
 public class OwnerHotelController {
 
     private final HotelOwnerRepository repo;
-
+    private final OwnerSettlementQueryService ownerSettleQuery;
     /** 내 호텔 목록 */
     @GetMapping
     public List<OwnerHotelView> myHotels(@AuthenticationPrincipal Object principal) {
@@ -43,5 +46,12 @@ public class OwnerHotelController {
         }
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (auth != null ? auth.getName() : null);
+    }
+    /** 지난주 정산(SETTLED 합계) */
+    @GetMapping("/{id}/last-week-settlement")
+    public WeeklySettlementDTO lastWeekSettlement(@PathVariable("id") Long hotelId,
+                                                  @AuthenticationPrincipal Object principal) {
+        String loginId = resolveLoginId(principal);
+        return ownerSettleQuery.getLastWeekSettledForOwner(hotelId, loginId);
     }
 }

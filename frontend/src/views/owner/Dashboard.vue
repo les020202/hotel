@@ -339,6 +339,31 @@ function tryComputeAvgFromSales () {
   if (salesMode.value === 'week'  && avgWeekSales.value  == null) avgWeekSales.value  = avg
   if (salesMode.value === 'month' && avgMonthSales.value == null) avgMonthSales.value = avg
 }
+// NEW: 지난주 정산 금액
+const lastWeekSettled = ref(null)
+const loadingLastWeek = ref(false)
+
+async function loadLastWeekSettled () {
+  if (!hotelId.value) return
+  loadingLastWeek.value = true
+  try {
+    const res = await api(`/api/owner/hotels/${hotelId.value}/last-week-settlement`)
+    if (res.ok) {
+      const data = await res.json()
+      // 응답: { hotelId, sumSettled } 또는 숫자 그대로 내려오는 경우까지 호환
+      const v = (data && typeof data === 'object')
+        ? (data.sumSettled ?? data.sum_settled ?? data.value ?? 0)
+        : Number(data ?? 0)
+      lastWeekSettled.value = Number.isFinite(+v) ? +v : 0
+    } else {
+      lastWeekSettled.value = 0
+    }
+  } catch {
+    lastWeekSettled.value = 0
+  } finally {
+    loadingLastWeek.value = false
+  }
+}
 
 function computeMonthlyWeeklyAverageFromDaily(dailyItems, anchorDate) {
   if (!dailyItems?.length || !anchorDate) return null
@@ -470,6 +495,7 @@ onMounted(async () => {
   await loadAvgSales()
   await loadSales()
   await loadFixedAverages()
+   await loadLastWeekSettled() 
   setupWeekRolloverTimer()
 })
 
@@ -485,6 +511,7 @@ watch(() => route.params.hotelId, async v => {
   await loadAvgSales()
   await loadSales()
   await loadFixedAverages()
+    await loadLastWeekSettled()    
 })
 
 watch(() => route.fullPath, async (p) => {
@@ -556,6 +583,16 @@ watchEffect(async () => {
         </div>
         <div class="kpi-help">월요일~일요일 · 결제별 15% 차감</div>
       </div>
+      <!-- 기존: 이번주 정산 예정 금액 카드 바로 다음에 추가 -->
+<div class="kpi card">
+  <div class="kpi-label">지난주 정산 금액</div>
+  <div class="kpi-value">
+    <span v-if="loadingLastWeek">…</span>
+    <span v-else>{{ lastWeekSettled == null ? '—' : `${fmtKRW(lastWeekSettled)}원` }}</span>
+  </div>
+  <div class="kpi-help">지난주(월~일) · 확정(SETTLED)만</div>
+</div>
+
 
       <div class="kpi card">
         <div class="kpi-label">금주 일별 평균 매출</div>

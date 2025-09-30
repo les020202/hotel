@@ -60,4 +60,5 @@ public interface SettlementStatementRepository extends JpaRepository<SettlementS
     // 전체 (최신 생성순)
     List<SettlementStatement> findByPeriodStartGreaterThanEqualAndPeriodEndLessThanEqualOrderByCreatedAtDesc(
             LocalDate start, LocalDate end);
+    
 }
