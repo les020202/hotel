@@ -604,7 +604,7 @@ watchEffect(async () => {
       </div>
 
       <div class="kpi card">
-        <div class="kpi-label">월별 평균 매출</div>
+        <div class="kpi-label">이번달 매출 총액</div>
         <div class="kpi-value">
           <span v-if="fixedMonthlyAvgSales == null">—</span>
           <span v-else>{{ fmtKRW(fixedMonthlyAvgSales) }}원</span>

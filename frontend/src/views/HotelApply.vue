@@ -120,7 +120,7 @@
                 <p v-if="showErr && !address1" class="err">필수 입력입니다.</p>
               </label>
 
-              
+             
             </div>
           </div>
 
@@ -304,6 +304,27 @@ import api from '@/api/auth'
 import router from '@/router'
 import PostcodeSearch from '@/views/mypage/PostcodeSearch.vue' // ✅ 여기 경로 사용
 
+// ====== 추가: 안전한 UUID 유틸 ======
+function genId(): string {
+  const c =
+    (typeof globalThis !== 'undefined' ? (globalThis as any).crypto : undefined) ||
+    (typeof window !== 'undefined' ? (window as any).crypto : undefined);
+
+  if (c?.randomUUID) return c.randomUUID();
+
+  if (c?.getRandomValues) {
+    const a = new Uint8Array(16);
+    c.getRandomValues(a);
+    a[6] = (a[6] & 0x0f) | 0x40;
+    a[8] = (a[8] & 0x3f) | 0x80;
+    const toHex = (n: number) => n.toString(16).padStart(2, '0');
+    const s = Array.from(a, toHex).join('');
+    return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`;
+  }
+
+  return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 type Banner = { type: 'success' | 'error'; text: string }
 type Room = {
   id: string
@@ -403,7 +424,7 @@ function toggleAmenity(code: string) {
 
 function blankRoom(): Room {
   return {
-    id: crypto.randomUUID(),
+    id: genId(), // 변경: crypto.randomUUID() → genId()
     typeCode: 'STANDARD',
     roomCount: 1,
     roomNos: '',
@@ -419,12 +440,12 @@ function addRoom() { rooms.value.push(blankRoom()) }
 function addRoomFromLast() {
   const last = rooms.value[rooms.value.length - 1]
   if (!last) return addRoom()
-  const copy: Room = { ...JSON.parse(JSON.stringify(last)), id: crypto.randomUUID() }
+  const copy: Room = { ...JSON.parse(JSON.stringify(last)), id: genId() } // 변경
   rooms.value.push(copy)
 }
 function duplicateRoom(idx: number) {
   const target = rooms.value[idx]; if (!target) return
-  const copy: Room = { ...JSON.parse(JSON.stringify(target)), id: crypto.randomUUID() }
+  const copy: Room = { ...JSON.parse(JSON.stringify(target)), id: genId() } // 변경
   rooms.value.splice(idx + 1, 0, copy)
 }
 function removeRoom(id: string) {

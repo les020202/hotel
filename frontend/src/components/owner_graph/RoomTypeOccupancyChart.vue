@@ -152,7 +152,7 @@ const fmtNum = (v) => new Intl.NumberFormat('ko-KR').format(Number(v || 0))
   <div class="rt-occu card">
     <div class="head">
       <div class="title">
-        <h3>객실 타입별 예약 점유율</h3>
+        <h3>객실 타입별 가용 비율</h3>
         <span class="muted">
           기간: {{ range.from }} ~ {{ range.to }}
         </span>

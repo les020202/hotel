@@ -3,7 +3,7 @@
     <div class="container header-inner">
       <!-- 로고 -->
       <div class="logo">
-        <router-link to="/" aria-label="홈으로 이동">류경호텔</router-link>
+        <router-link to="/" aria-label="홈으로 이동">호텔</router-link>
       </div>
 
       <!-- 가운데 타이틀 -->

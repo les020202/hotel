@@ -163,17 +163,17 @@ async function onLogin() {
 
         <div class="social-icons">
           <a class="icon-btn google"
-             href="http://172.16.15.59:8888/oauth2/authorization/google?prompt=select_account"
+             href="http://localhost:8888/oauth2/authorization/google?prompt=select_account"
              aria-label="Google로 로그인">
             <img class="icon-img" src="https://developers.google.com/identity/images/g-logo.png" alt="" />
           </a>
           <a class="icon-btn naver"
-             href="http://172.16.15.59:8888/oauth2/authorization/naver?auth_type=reprompt"
+             href="http://localhost:8888/oauth2/authorization/naver?auth_type=reprompt"
              aria-label="Naver로 로그인">
             <img class="icon-img invert" src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/naver.svg" alt="" />
           </a>
           <a class="icon-btn kakao"
-             href="http://172.16.15.59:8888/oauth2/authorization/kakao?prompt=login"
+             href="http://localhost:8888/oauth2/authorization/kakao?prompt=login"
              aria-label="Kakao로 로그인">
             <img class="icon-img" src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/KakaoTalk_logo.svg/960px-KakaoTalk_logo.svg.png" alt="" />
           </a>
