@@ -1,0 +1,55 @@
+@import './base.css';
+
+/* ─────────────────────────────────────────
+   공개(비관리자) 페이지: 기존처럼 센터 고정
+   ───────────────────────────────────────── */
+body:not(.admin) #app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+/* ─────────────────────────────────────────
+   관리자(admin) 페이지: 화면 가득
+   - 우선순위 충돌 대비로 !important 추가
+   - 하위에 wrap/container/page 같은 래퍼가
+     max-width를 잡아먹는 경우도 함께 해제
+   ───────────────────────────────────────── */
+body.admin #app {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 관리자에서 흔한 래퍼들의 고정폭/가운데 정렬 해제 */
+body.admin .wrap,
+body.admin .container,
+body.admin .page {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* (선택) 표/카드가 스스로 최소폭을 강제하는 경우 방지 */
+body.admin .table,
+body.admin .table-card {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  /* table-layout: auto;  // 필요할 때만 */
+}
+
+/* 링크 기본 스타일(기존 유지) */
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
