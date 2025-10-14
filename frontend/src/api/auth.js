@@ -15,7 +15,14 @@ const api = axios.create({
 const KEY_PRIMARY = 'token'
 const KEY_LEGACY = 'accessToken'
 
-// === 인증 상태 (메모리 + 로컬스토리지 동기화) ===
+/*
+  Note:
+  - login(payload) 는 payload에 recaptchaToken 필드를 포함할 수 있도록 설계되어 있습니다.
+    ex) login({ loginId, password, recaptchaToken })
+  - backend AuthController.login 에서 recaptchaToken을 검사하도록 구현되어 있으면
+    추가 수정 없이 바로 동작합니다.
+*/
+
 let accessToken =
   localStorage.getItem(KEY_PRIMARY) ||
   localStorage.getItem(KEY_LEGACY) ||
@@ -78,9 +85,8 @@ function getErrorMessage(e) {
 }
 
 // === 로그인/로그아웃 ===
-// ✅ 두 번째 파일의 정책 반영: 서버 JSON을 보존해 반환/던짐 (attempts/locked 사용 가능)
-//    - 성공 시 토큰 저장은 화면(LoginView)에서 처리 (localStorage.setItem('token', token))
-//    - 필요하면 이후에 setAuth(token, me)로 통합할 수 있음(현재 요구사항은 화면에서 처리)
+// ✅ 로그인 호출은 payload 를 그대로 전송합니다.
+//    payload에 recaptchaToken을 포함하면 백엔드에서 검증 후 처리합니다.
 export async function login(payload) {
   try {
     const { data } = await api.post('/auth/login', payload, { withCredentials: true })

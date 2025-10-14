@@ -1,25 +1,30 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
-import { login } from '@/api/auth'
-import HeroSlideshow from '@/components/HeroSlideshow.vue'   // ✅ 슬라이드 컴포넌트
+import { login as apiLogin } from '@/api/auth'
+import HeroSlideshow from '@/components/HeroSlideshow.vue'
 
 const router = useRouter()
 const loginId = ref('')
 const password = ref('')
 const msg = ref('')
 const loading = ref(false)
-/* 비밀번호 보기/숨기기 */
 const show = ref(false)
 const rememberId = ref(false)
 
-/* 배경 이미지(3장) - public/hero/ 에 넣어두면 아래 경로 그대로 사용 가능 */
 const heroImages = [
   { src: '/hero/hotel-1.jpg', alt: '야경 호텔' },
   { src: '/hero/hotel-2.jpg', alt: '바다 전망 리조트' },
   { src: '/hero/hotel-3.jpg', alt: '숲 속 힐링 리조트' }
 ]
-/* --- JWT 파싱 & 역할 정규화 --- */
+
+// reCAPTCHA 관련
+const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITEKEY || '본인_SITE_KEY'
+const recaptchaToken = ref(null)
+const recaptchaWidgetId = ref(null)
+const recaptchaLoaded = ref(false)
+let scriptEl = null
+
 function parseJwt (token) {
   try { return JSON.parse(atob(token.split('.')[1])) } catch { return null }
 }
@@ -39,14 +44,75 @@ function getRoleFromPayload (user) {
 onMounted(() => {
   const saved = localStorage.getItem('remember_login_id')
   if (saved) { loginId.value = saved; rememberId.value = true }
+
+  // reCAPTCHA 스크립트 동적 로드 (v2)
+  if (!window.grecaptcha) {
+    scriptEl = document.createElement('script')
+    scriptEl.src = 'https://www.google.com/recaptcha/api.js?render=explicit'
+    scriptEl.async = true
+    scriptEl.defer = true
+    scriptEl.onload = () => {
+      // 렌더링은 약간 시간차가 있으므로 setTimeout으로 안전하게 처리
+      setTimeout(() => {
+        tryRenderRecaptcha()
+      }, 200)
+    }
+    document.head.appendChild(scriptEl)
+  } else {
+    tryRenderRecaptcha()
+  }
 })
+
+onUnmounted(() => {
+  // cleanup
+  if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl)
+  if (recaptchaWidgetId.value != null && window.grecaptcha) {
+    try { window.grecaptcha.reset(recaptchaWidgetId.value) } catch {}
+  }
+})
+
+function tryRenderRecaptcha () {
+  if (!window.grecaptcha || recaptchaLoaded.value) return
+  const el = document.getElementById('recaptcha-container')
+  if (!el) return
+  try {
+    recaptchaWidgetId.value = window.grecaptcha.render(el, {
+      'sitekey': recaptchaSiteKey,
+      'callback': (token) => {
+        recaptchaToken.value = token
+        // 사용자에게 입력 폼 보여주려면 여기에서 처리 (이미 보임)
+      },
+      'expired-callback': () => {
+        recaptchaToken.value = null
+      }
+    })
+    recaptchaLoaded.value = true
+  } catch (e) {
+    console.error('reCAPTCHA render error', e)
+  }
+}
 
 async function onLogin() {
   msg.value = ''
   loading.value = true
+
+  // reCAPTCHA 토큰 확인 (개발 환경에서는 토큰 체크를 느슨히 하고 싶다면 주석 가능)
+  if (!recaptchaToken.value) {
+    msg.value = '자동화 방지를 위해 reCAPTCHA를 완료해주세요.'
+    loading.value = false
+    return
+  }
+
   try {
-    const { token } = await login({ loginId: loginId.value, password: password.value })
+    // 기존 API 모듈 사용: login({loginId, password, recaptchaToken})
+    const { token } = await apiLogin({
+      loginId: loginId.value,
+      password: password.value,
+      recaptchaToken: recaptchaToken.value
+    })
+
     if (rememberId.value) localStorage.setItem('remember_login_id', loginId.value)
+    else localStorage.removeItem('remember_login_id')
 
     const role = getRoleFromPayload(parseJwt(token))
     localStorage.setItem('token', token)
@@ -55,36 +121,39 @@ async function onLogin() {
       role === 'ROLE_ADMIN' ? '/admin' :
       role === 'ROLE_OWNER' ? '/owner' : '/main'
 
-    await router.push(target)   // ✅ 한 번만 push
+    // 로그인 직후 reCAPTCHA 리셋(다음 로그인 시 재획득 필요)
+    try { window.grecaptcha.reset(recaptchaWidgetId.value); recaptchaToken.value = null } catch {}
+
+    await router.push(target)
   } catch (e) {
+    // e는 API 에러에서 throw된 객체 (아래 api/auth 예시와 호환)
     const { error, attempts = 0, locked = false } = e || {}
     if (locked) {
       msg.value = '계정이 잠겼습니다. 1시간 후에 다시 시도해주세요.'
     } else if (error === 'INVALID_CREDENTIALS') {
       msg.value = `아이디 또는 비밀번호가 올바르지 않습니다. (틀린 횟수: ${attempts})`
+    } else if (error === 'RECAPTCHA_FAILED') {
+      msg.value = 'reCAPTCHA 검증에 실패했습니다. 새로고침 후 다시 시도하세요.'
     } else if (typeof error === 'string' && error.length) {
       msg.value = error
     } else {
       msg.value = '로그인 실패'
     }
+    // reCAPTCHA 리셋
+    try { window.grecaptcha.reset(recaptchaWidgetId.value); recaptchaToken.value = null } catch {}
   } finally {
     loading.value = false
   }
 }
-
 </script>
 
 <template>
   <div class="auth-shell">
     <section class="auth-card">
-      <!-- Left visual -->
       <aside class="auth-visual">
-        <!-- ✅ 슬라이드(왼쪽 영역 전체를 덮도록 감싸줌) -->
         <div class="vis-box">
           <HeroSlideshow :images="heroImages" :interval="15000" default-pos="50% 60%" />
         </div>
-
-        <!-- ✅ 오버레이 카피 -->
         <div class="visual-copy">
           <div class="brand">
             <span class="logo-dot"></span>
@@ -95,51 +164,30 @@ async function onLogin() {
         </div>
       </aside>
 
-      <!-- Right form -->
       <div class="auth-pane">
         <h2 class="title">로그인</h2>
         <p class="subtitle">계정 정보를 입력해주세요.</p>
         <form class="form" @submit.prevent="onLogin">
           <div class="field">
             <label class="sr-only" for="loginId">아이디</label>
-            <input
-              id="loginId"
-              class="input"
-              v-model.trim="loginId"
-              placeholder="아이디"
-              autocomplete="username"
-              required
-              autofocus
-            />
+            <input id="loginId" class="input" v-model.trim="loginId" placeholder="아이디" autocomplete="username" required autofocus />
           </div>
 
           <div class="field">
             <label class="sr-only" for="password">비밀번호</label>
             <div class="passwrap">
-              <input
-                :type="show ? 'text' : 'password'"
-                id="password"
-                class="input"
-                v-model.trim="password"
-                placeholder="비밀번호"
-                autocomplete="current-password"
-                required
-              />
-              <button
-                type="button"
-                class="eye"
-                @click="show = !show"
-                :aria-label="show ? '비밀번호 숨기기' : '비밀번호 보기'"
-              >
+              <input :type="show ? 'text' : 'password'" id="password" class="input" v-model.trim="password" placeholder="비밀번호" autocomplete="current-password" required />
+              <button type="button" class="eye" @click="show = !show" :aria-label="show ? '비밀번호 숨기기' : '비밀번호 보기'">
                 <svg viewBox="0 0 24 24" class="eye-ico" aria-hidden="true">
-                  <path d="M1.5 12s3.5-6.5 10.5-6.5S22.5 12 22.5 12s-3.5 6.5-10.5 6.5S1.5 12 1.5 12Z"
-                        fill="none" stroke="currentColor" stroke-width="1.6"/>
-                  <circle cx="12" cy="12" r="2.7"
-                        fill="none" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="M1.5 12s3.5-6.5 10.5-6.5S22.5 12 22.5 12s-3.5 6.5-10.5 6.5S1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                  <circle cx="12" cy="12" r="2.7" fill="none" stroke="currentColor" stroke-width="1.6"/>
                 </svg>
               </button>
             </div>
           </div>
+
+          <!-- reCAPTCHA 위젯 -->
+          <div id="recaptcha-container" style="margin: 6px 0 12px;"></div>
 
           <div class="row between hint">
             <span>계정이 없으신가요?</span>
@@ -148,6 +196,7 @@ async function onLogin() {
           <div class="row between hint">
             <RouterLink class="link" to="/find-password">비밀번호 찾기</RouterLink>
           </div>
+
           <label class="remember">
             <input type="checkbox" v-model="rememberId" />
             <span>아이디 기억하기</span>
@@ -162,19 +211,13 @@ async function onLogin() {
         <div class="divider"><span>또는</span></div>
 
         <div class="social-icons">
-          <a class="icon-btn google"
-             href="http://localhost:8888/oauth2/authorization/google?prompt=select_account"
-             aria-label="Google로 로그인">
+          <a class="icon-btn google" href="http://localhost:8888/oauth2/authorization/google?prompt=select_account" aria-label="Google로 로그인">
             <img class="icon-img" src="https://developers.google.com/identity/images/g-logo.png" alt="" />
           </a>
-          <a class="icon-btn naver"
-             href="http://localhost:8888/oauth2/authorization/naver?auth_type=reprompt"
-             aria-label="Naver로 로그인">
+          <a class="icon-btn naver" href="http://localhost:8888/oauth2/authorization/naver?auth_type=reprompt" aria-label="Naver로 로그인">
             <img class="icon-img invert" src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/naver.svg" alt="" />
           </a>
-          <a class="icon-btn kakao"
-             href="http://localhost:8888/oauth2/authorization/kakao?prompt=login"
-             aria-label="Kakao로 로그인">
+          <a class="icon-btn kakao" href="http://localhost:8888/oauth2/authorization/kakao?prompt=login" aria-label="Kakao로 로그인">
             <img class="icon-img" src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/KakaoTalk_logo.svg/960px-KakaoTalk_logo.svg.png" alt="" />
           </a>
         </div>

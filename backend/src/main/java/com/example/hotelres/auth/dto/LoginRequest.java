@@ -6,4 +6,5 @@ import lombok.Getter; import lombok.Setter;
 public class LoginRequest {
     private String loginId;
     private String password;
+    private String recaptchaToken;
 }
