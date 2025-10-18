@@ -183,7 +183,7 @@
         <div class="label">Address</div>
         <div class="value" v-if="!edit.addr">
           <div>{{ me.address1 || '-' }}</div>
-          <div class="sub">{{ me.address2 }}</div>
+           <div class="sub" v-text="me.address2"></div>
           <div class="sub">({{ me.postcode || '우편번호 없음' }})</div>
         </div>
         <div class="value addr-edit" v-else>
@@ -199,7 +199,12 @@
             <button type="button" class="small" @click="showPostcode = true">주소 찾기</button>
           </div>
           <input v-model.trim="me.address1" placeholder="도로명 주소" readonly />
-          <input ref="address2Ref" v-model.trim="me.address2" placeholder="상세 주소" />
+           <input
+  ref="address2Ref"
+  v-model.trim="me.address2"
+  placeholder="상세 주소"
+  maxlength="120"
+  @input="onAddr2Input"/> 
         </div>
         <button class="small" @click="edit.addr = !edit.addr">
           {{ edit.addr ? 'Done' : 'Change' }}
@@ -516,6 +521,22 @@ function togglePasswordEdit() {
   }
   edit.value.password = !edit.value.password
 }
+const rxAddr2Whitelist = /^[\p{L}\p{N}\s.,#()\-_/~]{0,120}$/u
+
+function onAddr2Input(e){
+  let v = String(e.target.value || '')
+
+  // 흔한 페이로드 제거
+  v = v.replace(/[<>]/g, '')              // 태그 꺾쇠 제거
+       .replace(/javascript:/gi, '')      // javascript: 스킴 제거
+       .replace(/\bon[a-z]+\s*=/gi, '')   // onload= 등 이벤트 제거
+
+  // 화이트리스트로 정리
+  if (!rxAddr2Whitelist.test(v)) {
+    v = v.replace(/[^ .,#()\-_/~\p{L}\p{N}]/gu, '')
+  }
+  me.value.address2 = v.slice(0, 120)
+}
 </script>
 
 <style scoped>
@@ -630,4 +651,7 @@ input, select {
 @media (max-width: 760px){
   .pw-grid{ grid-template-columns: 1fr; }
 }
+
+
+
 </style>

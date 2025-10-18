@@ -124,10 +124,44 @@ const AVATAR_SRC = {
   T3: new URL("@/assets/avatars/T3.jpg", import.meta.url).href,
 };
 
+/* ───────────────────────────────────────────────────────────────
+   업로드 보안 유틸 (SVG 차단, 확장자/용량 체크, 이미지 유효성)
+   ─────────────────────────────────────────────────────────────── */
+const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_EXT = new Set(["png", "jpg", "jpeg", "webp"]);
+const BLOCKED_MIME = new Set(["image/svg+xml"]);
+
+function getExt(name = "") {
+  const m = String(name).toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : "";
+}
+
+async function validateImageFile(file) {
+  if (!file) throw new Error("파일이 없습니다.");
+  if (BLOCKED_MIME.has(file.type)) throw new Error("SVG는 허용되지 않습니다.");
+  const ext = getExt(file.name);
+  if (!ALLOWED_EXT.has(ext)) throw new Error("PNG/JPG/WebP만 업로드 가능합니다.");
+  if (file.size > MAX_SIZE) throw new Error("파일 크기가 5MB를 초과했습니다.");
+
+  // 브라우저 지원 시 실제 이미지 여부 간단 확인
+  try {
+    await createImageBitmap(file);
+  } catch {
+    throw new Error("이미지 파일이 손상되었거나 지원되지 않습니다.");
+  }
+  return true;
+}
+
+async function doUploadTo(url, file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  await api.post(url, fd, { headers: { "Content-Type": "multipart/form-data" } });
+}
+
 /* 상태 관리 */
-const me = ref(null); // 현재 로그인한 사용자 정보
-const coverModal = ref(false); // 커버 모달 표시 여부
-const avatarModal = ref(false); // 아바타 모달 표시 여부
+const me = ref(null);
+const coverModal = ref(false);
+const avatarModal = ref(false);
 
 /* 사용자 정보 로드 */
 async function loadMe() {
@@ -143,9 +177,9 @@ onMounted(loadMe);
 const avatarUrl = computed(() => {
   if (!me.value) return null;
   if (me.value.profileImageType === "UPLOADED" && me.value.profileImageUrl)
-    return me.value.profileImageUrl; // 직접 업로드 이미지
+    return me.value.profileImageUrl;
   if (me.value.profileImageType === "TEMPLATE" && me.value.profileImageTemplate)
-    return AVATAR_SRC[me.value.profileImageTemplate] || null; // 템플릿
+    return AVATAR_SRC[me.value.profileImageTemplate] || null;
   return null;
 });
 const avatarStyle = computed(() =>
@@ -162,19 +196,32 @@ const avatarStyle = computed(() =>
 const coverStyle = computed(() => {
   if (!me.value) return {};
   if (me.value.coverImageType === "UPLOADED" && me.value.coverImageUrl) {
-    return { backgroundImage: `url(${me.value.coverImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" };
+    return {
+      backgroundImage: `url(${me.value.coverImageUrl})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    };
   }
   if (me.value.coverImageType === "TEMPLATE" && me.value.coverImageTemplate) {
     const src = COVER_SRC[me.value.coverImageTemplate];
-    if (src) return { backgroundImage: `url(${src})`, backgroundSize: "cover", backgroundPosition: "center" };
+    if (src)
+      return {
+        backgroundImage: `url(${src})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      };
   }
   // 기본 배경
   return { background: "linear-gradient(60deg,#0c7a66,#f9a43a 55%,#ffd86b)" };
 });
 
 /* 🔹 모달 열기 */
-function openCoverModal() { coverModal.value = true }
-function openAvatarModal() { avatarModal.value = true }
+function openCoverModal() {
+  coverModal.value = true;
+}
+function openAvatarModal() {
+  avatarModal.value = true;
+}
 
 /* 🔹 템플릿 적용 */
 async function chooseCoverTemplate(code) {
@@ -183,7 +230,8 @@ async function chooseCoverTemplate(code) {
     coverModal.value = false;
     await loadMe();
   } catch (e) {
-    console.error(e); alert("커버 템플릿 적용 실패");
+    console.error(e);
+    alert("커버 템플릿 적용 실패");
   }
 }
 async function chooseAvatarTemplate(code) {
@@ -192,32 +240,40 @@ async function chooseAvatarTemplate(code) {
     avatarModal.value = false;
     await loadMe();
   } catch (e) {
-    console.error(e); alert("프로필 템플릿 적용 실패");
+    console.error(e);
+    alert("프로필 템플릿 적용 실패");
   }
 }
 
-/* 🔹 파일 업로드 */
+/* 🔹 파일 업로드 (강화된 검증 포함) */
 async function uploadCover(e) {
-  if (!e.target.files?.length) return;
-  const fd = new FormData(); fd.append("file", e.target.files[0]);
+  const file = e.target.files?.[0];
   try {
-    await api.post("/users/me/cover/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-    coverModal.value = false; await loadMe();
-  } catch (e) {
-    console.error(e); alert("커버 업로드 실패");
-  } finally { e.target.value = "" }
+    await validateImageFile(file);
+    await doUploadTo("/users/me/cover/upload", file);
+    coverModal.value = false;
+    await loadMe();
+  } catch (err) {
+    alert(err?.message || "커버 업로드 실패");
+  } finally {
+    e.target.value = "";
+  }
 }
 async function uploadAvatar(e) {
-  if (!e.target.files?.length) return;
-  const fd = new FormData(); fd.append("file", e.target.files[0]);
+  const file = e.target.files?.[0];
   try {
-    await api.post("/users/me/profile/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-    avatarModal.value = false; await loadMe();
-  } catch (e) {
-    console.error(e); alert("프로필 업로드 실패");
-  } finally { e.target.value = "" }
+    await validateImageFile(file);
+    await doUploadTo("/users/me/profile/upload", file);
+    avatarModal.value = false;
+    await loadMe();
+  } catch (err) {
+    alert(err?.message || "프로필 업로드 실패");
+  } finally {
+    e.target.value = "";
+  }
 }
 </script>
+
 <style scoped>
 .mypage {
   max-width: 1100px;
@@ -254,7 +310,7 @@ async function uploadAvatar(e) {
 .profile {
   display: flex;
   flex-direction: column;
-  align-items: center; /* 중앙 정렬 */
+  align-items: center;
   gap: 8px;
   margin-top: -48px;
   margin-bottom: 8px;
@@ -270,7 +326,7 @@ async function uploadAvatar(e) {
   background: #e5e7eb;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  pointer-events: auto; /* 클릭 가능 */
+  pointer-events: auto;
 }
 .avatar-fallback {
   display: block;

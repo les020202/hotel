@@ -1,22 +1,15 @@
-package com.example.hotelres.api;  
-// API 계층의 컨트롤러 클래스들이 모여 있는 패키지
+// src/main/java/com/example/hotelres/api/AccountController.java
+package com.example.hotelres.api;
 
 import com.example.hotelres.api.dto.AccountDtos.MeDto;
 import com.example.hotelres.api.dto.AccountDtos.MeUpdateDto;
 import com.example.hotelres.api.dto.AccountDtos.TemplateReq;
-// 마이페이지 관련 DTO (조회/수정/템플릿 요청 DTO) import
-
 import com.example.hotelres.common.CurrentUser;
-// 현재 인증된 사용자 정보를 가져오는 헬퍼 컴포넌트
-
 import com.example.hotelres.user.User;
 import com.example.hotelres.user.UserRepository;
-// User 엔티티와 해당 JPA Repository
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-// 입력값 검증 및 Lombok 의존성 주입
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -24,126 +17,153 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
-// 스프링 웹 관련 클래스들
 
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-// 파일 저장, 경로, 컬렉션, 랜덤 UUID 생성 등 유틸
 
 @RestController
 @RequestMapping("/api/users")
-// REST 컨트롤러, "/api/users" 경로로 매핑되는 클래스
 @RequiredArgsConstructor
-// final 필드에 대해 생성자 자동 주입
 public class AccountController {
 
-  private final CurrentUser currentUser; // 현재 로그인한 사용자 가져오는 헬퍼
-  private final UserRepository users;    // User 엔티티 저장/조회 JPA Repo
+  private final CurrentUser currentUser;
+  private final UserRepository users;
 
   @Value("${app.upload-dir:uploads}")
-  private String uploadDir; // 업로드 파일 저장 경로 (환경설정 없으면 "uploads" 기본값)
+  private String uploadDir;
 
-  private static final Set<String> ALLOWED_MIME = Set.of(
-      "image/png", "image/jpeg", "image/webp"
-  );
-  // 허용할 이미지 MIME 타입 (png, jpeg, webp만 허용)
+  private static final long MAX_SIZE = 5L * 1024 * 1024; // 5MB
+  private static final Set<String> ALLOWED_MIME = Set.of("image/png","image/jpeg","image/webp");
 
-  // 파일 확장자 안전하게 추출하는 메서드
+  /* ---------- (A) 텍스트 무해화(Sanitize) ---------- */
+  private static String sanitize(String s) {
+    if (s == null) return null;
+    // <script>…</script> 제거
+    s = s.replaceAll("(?is)<script.*?>.*?</script>", "");
+    // 모든 태그 제거
+    s = s.replaceAll("(?is)</?[^>]+>", "");
+    // on* 핸들러 / javascript: 제거
+    s = s.replaceAll("(?i)on[a-z]+\\s*=\\s*['\"][^'\"]*['\"]", "");
+    s = s.replaceAll("(?i)javascript:", "");
+    return s.trim();
+  }
+
+  /* ---------- (B) 확장자/시그니처 검증 유틸 ---------- */
   private static String safeExt(String filename, String contentType) {
     String ext = StringUtils.getFilenameExtension(filename);
     if (ext == null || ext.isBlank()) {
-      // 확장자가 없으면 contentType 으로 유추
       if ("image/png".equals(contentType))  return "png";
       if ("image/jpeg".equals(contentType)) return "jpg";
       if ("image/webp".equals(contentType)) return "webp";
-      return "dat"; // 알 수 없을 경우 기본 확장자
+      return "dat";
     }
-    return ext.toLowerCase(Locale.ROOT); // 확장자 소문자 처리
+    return ext.toLowerCase(Locale.ROOT);
   }
 
-  // 업로드된 파일을 서버 디렉토리에 저장하는 메서드
+  private static boolean looksLikePng(byte[] h) {
+    return h.length >= 8 &&
+        (h[0] & 0xFF) == 0x89 && h[1] == 0x50 && h[2] == 0x4E && h[3] == 0x47 &&
+        h[4] == 0x0D && h[5] == 0x0A && h[6] == 0x1A && h[7] == 0x0A;
+  }
+  private static boolean looksLikeJpeg(byte[] h) {
+    return h.length >= 3 &&
+        (h[0] & 0xFF) == 0xFF && (h[1] & 0xFF) == 0xD8 && (h[2] & 0xFF) == 0xFF;
+  }
+  private static boolean looksLikeWebp(byte[] h) {
+    return h.length >= 12 &&
+        h[0]=='R' && h[1]=='I' && h[2]=='F' && h[3]=='F' &&
+        h[8]=='W' && h[9]=='E' && h[10]=='B' && h[11]=='P';
+  }
+  private static boolean looksLikeAllowed(byte[] head, String contentType) {
+    return switch (contentType) {
+      case "image/png"  -> looksLikePng(head);
+      case "image/jpeg" -> looksLikeJpeg(head);
+      case "image/webp" -> looksLikeWebp(head);
+      default -> false;
+    };
+  }
+
+  private String makeSafeName(String prefix, String ext) {
+    String ts = String.valueOf(System.currentTimeMillis());
+    return "%s-%s-%s.%s".formatted(prefix, ts, UUID.randomUUID(), ext);
+  }
+
   private String saveFile(MultipartFile file, String prefix) throws IOException {
-    if (file == null || file.isEmpty()) {
+    if (file == null || file.isEmpty())
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "파일이 비어 있습니다.");
+    if (file.getSize() > MAX_SIZE)
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "파일 크기(5MB) 초과");
+
+    String ct = file.getContentType();
+    if (ct == null || !ALLOWED_MIME.contains(ct))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PNG/JPEG/WebP만 허용");
+
+    // 매직바이트 검사
+    byte[] head;
+    try (var in = file.getInputStream()) { head = in.readNBytes(16); }
+    if (!looksLikeAllowed(head, ct))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "파일 시그니처가 유효하지 않음");
+
+    Files.createDirectories(Paths.get(uploadDir));
+    String ext = safeExt(file.getOriginalFilename(), ct);
+    if (!Set.of("png","jpg","jpeg","webp").contains(ext)) {
+      if ("image/png".equals(ct)) ext = "png";
+      else if ("image/jpeg".equals(ct)) ext = "jpg";
+      else if ("image/webp".equals(ct)) ext = "webp";
     }
-    if (file.getContentType() == null || !ALLOWED_MIME.contains(file.getContentType())) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다.");
+    String name = makeSafeName(prefix, ext);
+    Path target = Paths.get(uploadDir).resolve(name).normalize();
+    try (var in = file.getInputStream()) {
+      Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
     }
-
-    Files.createDirectories(Paths.get(uploadDir)); // 저장 폴더 생성 (없으면)
-
-    String ext = safeExt(file.getOriginalFilename(), file.getContentType()); // 확장자 추출
-    String name = "%s-%s.%s".formatted(prefix, UUID.randomUUID(), ext); // 고유 파일명 생성
-
-    Path target = Paths.get(uploadDir, name);
-    Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING); 
-    // 파일 저장
-
-    return "/files/" + name; // 저장된 파일 접근 경로 리턴
+    return "/files/" + name;
   }
 
-  // ===== 조회 =====
+  /* ---------- (C) 내 정보 조회 ---------- */
   @GetMapping("/me")
   public MeDto me(Authentication auth) {
-    User u = currentUser.get(auth); // 현재 로그인한 User 엔티티 가져오기
+    User u = currentUser.get(auth);
     return new MeDto(
-        u.getId(),
-        u.getLoginId(),
-        u.getEmail(),
-        u.getName(),
-        u.getPhone(),
-        u.getAddress1(),
-        u.getAddress2(),
-        u.getPostcode(),
-        u.getGender() != null ? u.getGender().name() : null,
-        u.getBirthDate(),
-        // profile
-        u.getProfileImageType() != null ? u.getProfileImageType().name() : "NONE",
+        u.getId(), u.getLoginId(), u.getEmail(), u.getName(), u.getPhone(),
+        u.getAddress1(), u.getAddress2(), u.getPostcode(),
+        u.getGender()!=null ? u.getGender().name() : null, u.getBirthDate(),
+        u.getProfileImageType()!=null ? u.getProfileImageType().name() : "NONE",
         u.getProfileImageUrl(),
-        u.getProfileImageTemplate() != null ? u.getProfileImageTemplate().name() : null,
-        // cover
-        u.getCoverImageType() != null ? u.getCoverImageType().name() : "NONE",
+        u.getProfileImageTemplate()!=null ? u.getProfileImageTemplate().name() : null,
+        u.getCoverImageType()!=null ? u.getCoverImageType().name() : "NONE",
         u.getCoverImageUrl(),
-        u.getCoverImageTemplate() != null ? u.getCoverImageTemplate().name() : null
+        u.getCoverImageTemplate()!=null ? u.getCoverImageTemplate().name() : null
     );
   }
-  // ▶ 내 정보(Me) 조회 API
 
-  // ===== 기본 정보 수정 =====
+  /* ---------- (D) 기본 정보 수정: @Valid + sanitize ---------- */
   @PutMapping("/me")
-  public void update(Authentication auth, @RequestBody MeUpdateDto dto) {
-    User u = currentUser.get(auth); // 현재 로그인 User
-
-    if (StringUtils.hasText(dto.name()))     u.setName(dto.name());
-    if (StringUtils.hasText(dto.phone()))    u.setPhone(dto.phone());
-    u.setAddress1(dto.address1());
-    u.setAddress2(dto.address2());
-    u.setPostcode(dto.postcode());
-
+  public void update(Authentication auth, @Valid @RequestBody MeUpdateDto dto) {
+    User u = currentUser.get(auth);
+    if (StringUtils.hasText(dto.name()))  u.setName(sanitize(dto.name()));
+    if (StringUtils.hasText(dto.phone())) u.setPhone(sanitize(dto.phone()));
+    u.setAddress1(sanitize(dto.address1()));
+    u.setAddress2(sanitize(dto.address2()));
+    u.setPostcode(sanitize(dto.postcode()));
     if (StringUtils.hasText(dto.gender())) {
-      try {
-        u.setGender(User.Gender.valueOf(dto.gender()));
-      } catch (IllegalArgumentException ignore) {}
-      // 잘못된 gender 값이 들어와도 무시
+      try { u.setGender(User.Gender.valueOf(dto.gender())); } catch (IllegalArgumentException ignore) {}
     }
-
-    users.save(u); // 변경 내용 저장
+    users.save(u);
   }
-  // ▶ 기본 정보(이름, 연락처, 주소, 성별) 수정 API
 
-  // ===== 프로필 업로드 / 템플릿 선택 =====
-  @PostMapping(path = "/me/profile/upload", consumes = "multipart/form-data")
+  /* ---------- (E) 프로필/커버 업로드 & 템플릿 ---------- */
+  @PostMapping(path="/me/profile/upload", consumes="multipart/form-data")
   public MeDto uploadProfile(Authentication auth, @RequestParam("file") MultipartFile file) throws IOException {
     User u = currentUser.get(auth);
-    String url = saveFile(file, "profile-" + u.getId()); // 파일 저장
-    u.setProfileImageType(User.ImageType.UPLOADED); // 업로드 타입으로 지정
-    u.setProfileImageUrl(url);                      // 저장된 URL 기록
-    u.setProfileImageTemplate(null);                // 템플릿 값 초기화
+    String url = saveFile(file, "profile-" + u.getId());
+    u.setProfileImageType(User.ImageType.UPLOADED);
+    u.setProfileImageUrl(url);
+    u.setProfileImageTemplate(null);
     users.save(u);
-    return me(auth); // 수정 후 최신 정보 반환
+    return me(auth);
   }
 
   @PutMapping("/me/profile/template")
@@ -153,20 +173,18 @@ public class AccountController {
       User.ProfileTpl tpl = User.ProfileTpl.valueOf(req.template().toUpperCase());
       u.setProfileImageType(User.ImageType.TEMPLATE);
       u.setProfileImageTemplate(tpl);
-      u.setProfileImageUrl(null); // URL은 null로 초기화
+      u.setProfileImageUrl(null);
       users.save(u);
     } catch (IllegalArgumentException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 프로필 템플릿 코드");
     }
     return me(auth);
   }
-  // ▶ 프로필 이미지 업로드/템플릿 선택 API
 
-  // ===== 커버 업로드 / 템플릿 선택 =====
-  @PostMapping(path = "/me/cover/upload", consumes = "multipart/form-data")
+  @PostMapping(path="/me/cover/upload", consumes="multipart/form-data")
   public MeDto uploadCover(Authentication auth, @RequestParam("file") MultipartFile file) throws IOException {
     User u = currentUser.get(auth);
-    String url = saveFile(file, "cover-" + u.getId()); // 파일 저장
+    String url = saveFile(file, "cover-" + u.getId());
     u.setCoverImageType(User.ImageType.UPLOADED);
     u.setCoverImageUrl(url);
     u.setCoverImageTemplate(null);
@@ -188,5 +206,4 @@ public class AccountController {
     }
     return me(auth);
   }
-  // ▶ 커버 이미지 업로드/템플릿 선택 API
 }
