@@ -1,77 +1,58 @@
-package com.example.hotelres.api.dto;  
-// 고객지원(Support) 관련 DTO들을 모아둔 패키지
+package com.example.hotelres.api.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
-// 날짜/시간을 다루기 위해 LocalDateTime 사용
 import java.util.List;
 
 import com.example.hotelres.support.SupportTicket;
 
 public class SupportDtos {
-    // 고객지원 기능(공지사항, FAQ, 상담 티켓 등)에 사용하는 DTO들을 모은 클래스
-
-    // ── Notices (공지사항 관련)
+    // ── Notices
     public record NoticeBrief(
-        Long id,                 // 공지사항 ID
-        String title,            // 제목
-        boolean pinned,          // 상단 고정 여부
-        LocalDateTime createdAt  // 생성일시
+        Long id,
+        String title,
+        boolean pinned,
+        LocalDateTime createdAt
     ) {}
-    // ▶ NoticeBrief : 공지사항 목록에 보여줄 간단 정보 DTO
-
     public record NoticeDetail(
-        Long id,                 // 공지사항 ID
-        String title,            // 제목
-        String content,          // 상세 내용
-        boolean pinned,          // 상단 고정 여부
-        LocalDateTime createdAt  // 생성일시
+        Long id,
+        String title,
+        String content,
+        boolean pinned,
+        LocalDateTime createdAt
     ) {}
-    // ▶ NoticeDetail : 공지사항 상세보기 DTO
+    public record NoticeNavRes(Long prevId, Long nextId) {}
 
-    public record NoticeNavRes(
-        Long prevId,  // 이전 글 ID (없으면 null)
-        Long nextId   // 다음 글 ID (없으면 null)
-    ) {}
-    // ▶ NoticeNavRes : 공지사항 상세보기에서 "이전/다음 글 이동"을 위한 DTO
-
-    // ── FAQs (자주 묻는 질문 관련)
+    // ── FAQs
     public record FaqItem(
-        Long id,         // FAQ ID
-        String category, // 분류 (예: 숙소, 쿠폰, 결제 등)
-        String question, // 질문
-        String answer    // 답변
+        Long id,
+        String category,
+        String question,
+        String answer
     ) {}
-    // ▶ FaqItem : FAQ 한 건을 표현하는 DTO
 
-    // ── Tickets & Messages (상담 티켓 및 메시지 관련)
+    // ── Tickets & Messages
     public record TicketNewReq(
-        String subject,       // 티켓 제목
-        String firstMessage   // 최초 문의 내용
+        @Size(max = 150)  String subject,       // 제목은 컨트롤러에서 null 체크
+        @Size(max = 8000) String firstMessage   // 최초 메시지는 optional(기존 로직 유지)
     ) {}
-    // ▶ TicketNewReq : 새 상담 티켓 생성 요청 DTO
 
-    // 목록 item
     public record TicketBrief(Long id, String subject, String status, LocalDateTime createdAt) {
         public static TicketBrief of(SupportTicket t) {
-        return new TicketBrief(t.getId(), t.getSubject(), t.getStatus().name(), t.getCreatedAt());
+            return new TicketBrief(t.getId(), t.getSubject(), t.getStatus().name(), t.getCreatedAt());
         }
     }
-    // 목록 응답 (프론트 편의를 위해 items 배열 형태)
     public record TicketsRes(List<TicketBrief> items) {}
-   
 
     public record MessageReq(
-        String content  // 메시지 내용
+        @Size(max = 8000) String content  // 본문 길이 제한만 — 필수 여부는 컨트롤러에서 검사
     ) {}
-    // ▶ MessageReq : 티켓 내에 메시지를 추가할 때 사용하는 요청 DTO
 
     public record MessageRes(
-        Long id,                 // 메시지 ID
-        Long senderId,           // 보낸 사람 ID
-        String senderRole, 
-        String content,          // 메시지 내용
-        LocalDateTime createdAt  // 작성일시
+        Long id,
+        Long senderId,
+        String senderRole,
+        String content,
+        LocalDateTime createdAt
     ) {}
-    // ▶ MessageRes : 티켓 내 메시지를 클라이언트로 내려줄 때 사용하는 응답 DTO
 }

@@ -98,3 +98,7 @@ export async function deleteMessage(msgId) {
   const res = await api(`/api/admin/support/messages/${msgId}`, { method:'DELETE' })
   return res.ok
 }
+export const adminGetThread = getTicket
+export const adminReplyTicket = replyTicket
+export const adminEditMessage = updateMessage
+export const adminDeleteMessage = deleteMessage

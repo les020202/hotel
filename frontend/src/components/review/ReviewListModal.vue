@@ -59,10 +59,11 @@
                   />
                 </div>
 
+                <!-- 본문: v-html 없이 안전 -->
                 <div class="whitespace-pre-wrap">{{ r.comment || '' }}</div>
               </div>
 
-              <!-- 액션: 남의 리뷰만 신고, 내 리뷰만 삭제 -->
+              <!-- 액션 -->
               <div class="mt-2 flex justify-end gap-3 text-sm">
                 <button
                   v-if="!isMine(r)"
@@ -179,7 +180,7 @@ watch(() => props.open, (v) => {
 onMounted(() => { if (props.open) { setupObserver(); load() } })
 onBeforeUnmount(() => { if (observer) observer.disconnect() })
 
-// 이미지 라이트박스
+// 라이트박스
 const imgOpen = ref(false)
 const imgSrc = ref('')
 function openImage(src) { imgSrc.value = src; imgOpen.value = true }
@@ -189,8 +190,8 @@ async function onDelete(id) {
   if (!confirm('이 리뷰를 삭제할까요?')) return
   try {
     await deleteReview(id)
-    emit('changed')        // 부모의 평균/요약 갱신
-    resetAndLoad()         // 모달 목록 재로딩
+    emit('changed')
+    resetAndLoad()
   } catch (err) {
     let msg = '삭제에 실패했습니다.'
     try { const j = JSON.parse(err?.message || '{}'); if (j?.error) msg = j.error } catch {}
@@ -199,17 +200,18 @@ async function onDelete(id) {
   }
 }
 
-/* ---------- 신고: 드롭다운 모달 사용 ---------- */
+/* 신고 */
 const reportOpen = ref(false)
 const reportTargetId = ref(null)
 function openReport(id) {
   reportTargetId.value = id
   reportOpen.value = true
 }
-async function submitReport({ reason }) {
+async function submitReport({ reason, reasonCode, detail }) {
   if (!reportTargetId.value) return
   try {
-    await reportReview(reportTargetId.value, reason) // POST /api/reviews/{id}/report {reason}
+    const payload = reasonCode ? { reasonCode, detail: detail || '' } : { reason: reason || '' }
+    await reportReview(reportTargetId.value, payload)
     alert('신고가 접수되었습니다.')
   } catch (err) {
     let msg = '신고에 실패했습니다.'

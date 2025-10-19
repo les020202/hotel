@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.UUID;
+import java.util.*; // [NEW] for Set/Map/UUID
 
 @Service
 @RequiredArgsConstructor
@@ -20,16 +20,39 @@ public class ReviewFileStorageService {
     @Value("${app.upload-dir:uploads}")
     private String uploadDir;
 
+    // [NEW] 서버 측에서도 허용 확장자 “화이트리스트”를 강제
+    private static final Set<String> ALLOWED_EXT = Set.of("jpg","jpeg","png","webp","gif");
+
+    // [NEW] 간단 매직바이트(시그니처) 확인표 — 실제 운영은 Apache Tika 권장
+    private static final Map<String, byte[]> MAGIC_HEADERS = Map.of(
+        "png", new byte[]{(byte)0x89, 0x50, 0x4E, 0x47},
+        "jpg", new byte[]{(byte)0xFF, (byte)0xD8, (byte)0xFF},
+        "jpeg", new byte[]{(byte)0xFF, (byte)0xD8, (byte)0xFF},
+        "gif", new byte[]{0x47, 0x49, 0x46, 0x38} // "GIF8"
+        // webp 매직은 "RIFF....WEBP"라 길어 간단검사는 생략(운영은 Tika 사용 권장)
+    );
+
+    // [NEW] (선택) 서버 측 최대 크기 — application.properties 제한 외에 이중 안전
+    @Value("${app.upload.max-image-size-bytes:5242880}") // 5MB default
+    private long maxImageSizeBytes;
+
     public String save(MultipartFile file) {
         if (file == null || file.isEmpty()) return null;
 
+        // [NEW] (선택) 서버 측 크기 제한 이중 체크
+        if (file.getSize() > maxImageSizeBytes) {
+            throw new IllegalArgumentException("파일 용량이 허용치를 초과했습니다.");
+        }
+
         String ext = extOf(file.getOriginalFilename());
-        if (!isAllowed(ext, file.getContentType())) {
+
+        // [CHANGED] contentType만으로 신뢰하지 않고, 확장자 화이트리스트 우선
+        if (!isAllowed(ext, file.getContentType(), file)) {
             throw new IllegalArgumentException("허용되지 않은 파일 형식입니다.");
         }
 
         String ymd = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-        String filename = UUID.randomUUID() + (ext.isEmpty() ? "" : "." + ext);
+        String filename = UUID.randomUUID() + (ext.isEmpty() ? "" : "." + ext); // UUID 파일명 유지
 
         Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
         Path dir  = root.resolve("reviews").resolve(ymd);
@@ -40,7 +63,7 @@ public class ReviewFileStorageService {
             try (InputStream in = file.getInputStream()) {
                 Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
             }
-            // 정적 리소스 매핑: /files/** 로도 접근 가능
+            // 정적 리소스 매핑: /files/** 로 접근 (기존 동작 유지)
             return "/files/reviews/" + ymd + "/" + filename;
         } catch (IOException e) {
             throw new RuntimeException("파일 저장 실패", e);
@@ -53,13 +76,33 @@ public class ReviewFileStorageService {
         return i > -1 ? name.substring(i + 1).toLowerCase() : "";
     }
 
-    private boolean isAllowed(String ext, String contentType) {
-        if (contentType != null && contentType.startsWith("image/")) return true;
-        return switch (ext) {
-            case "jpg", "jpeg", "png", "webp", "gif" -> true;
-            default -> false;
-        };
+    // [CHANGED] 허용 판단 로직 강화: 확장자 화이트리스트 + (가능 시) 매직바이트
+    private boolean isAllowed(String ext, String contentType, MultipartFile file) {
+        // 확장자 화이트리스트 우선
+        if (!ALLOWED_EXT.contains(ext)) return false;
+
+        // 간단 content-type 체크(신뢰 X, 보조)
+        if (contentType != null && !contentType.toLowerCase().startsWith("image/")) {
+            // 일부 클라이언트가 contentType을 비워 보내기도 하므로, 이 값만으로 거부하지는 않음
+            // 여기서는 참고값으로만 사용
+        }
+
+        // 매직바이트 검사 (가능한 포맷에 대해)
+        byte[] magic = MAGIC_HEADERS.get(ext);
+        if (magic != null) {
+            try (InputStream is = file.getInputStream()) {
+                byte[] head = is.readNBytes(Math.max(4, magic.length));
+                if (head.length < magic.length) return false;
+                for (int i = 0; i < magic.length; i++) {
+                    if (head[i] != magic[i]) return false;
+                }
+            } catch (IOException e) {
+                return false;
+            }
+        }
+        return true;
     }
+
     public boolean deleteByUrl(String publicUrl) {
         if (!StringUtils.hasText(publicUrl)) return false;
         try {
@@ -77,7 +120,7 @@ public class ReviewFileStorageService {
                 relative = publicUrl.substring(prefix.length()); // e.g. "reviews/20250925/uuid.jpg"
             } else {
                 // 혹시 이미 상대경로 형태라면 그대로 사용
-                relative = publicUrl.replaceFirst("^/+","");
+                relative = publicUrl.replaceFirst("^/+",""); // 보안상 선행 슬래시 제거
             }
 
             Path root = Paths.get(uploadDir).toAbsolutePath().normalize();     // e.g. /.../uploads

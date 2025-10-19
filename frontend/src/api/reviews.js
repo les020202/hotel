@@ -1,6 +1,7 @@
 // src/api/reviews.js
 import { get, post, upload, postMultipart, del } from '@/api/_http'
-import api from '@/api/auth';
+import api from '@/api/auth'
+import { sanitizeText } from '@/utils/sanitize'   // ✅ [추가됨]
 
 /**
  * 호텔 상세의 리뷰 목록 (페이지네이션)
@@ -60,7 +61,7 @@ export async function deleteReview(id) {
 }
 
 /**
- * 리뷰 신고
+ * 리뷰 신고 (기존)
  * POST /api/reviews/{reviewId}/report
  * 허용 입력:
  *  - { reason } | { code } | { reasonCode }
@@ -68,7 +69,6 @@ export async function deleteReview(id) {
  *  - { reporterType }  // 서버가 쓰면 전달, 아니면 무시
  */
 export async function reportReview(reviewId, payload = {}) {
-  // 다양한 키를 reason으로 정규화하고 공백/placeholder 제거
   let reason =
     (payload.reason ?? payload.code ?? payload.reasonCode ?? '')
       .toString()
@@ -76,7 +76,6 @@ export async function reportReview(reviewId, payload = {}) {
   if (reason === '선택' || reason === '선택하세요') reason = ''
 
   const body = {
-    // 서버에서 null/빈 값은 "기타"로 처리하므로 프론트에서 막지 않는다.
     reason: reason || null,
     detail: (payload.detail ?? '').toString().trim() || null,
   }
@@ -93,3 +92,46 @@ export async function deleteMyReview(reviewId) {
   await api.delete(`/my/reviews/${reviewId}`);
 }
 
+/* -------------------------------------------------------------------
+ * [NEW] 문자열/객체 payload 모두 지원하는 확장형 신고 API (V2)
+ * ------------------------------------------------------------------- */
+
+// 내부 헬퍼: 문자열/객체 입력 모두 정규화 + XSS sanitize
+function _normalizeReportPayloadFlexible(payload = {}) {
+  // 문자열이면 { reason: '...' } 형태로 변환
+  if (typeof payload === 'string') {
+    return {
+      reason: sanitizeText(payload || '') || null,
+      detail: null
+    }
+  }
+
+  // 객체면 다양한 키(reason|code|reasonCode) 처리
+  let reason =
+    (payload.reason ?? payload.code ?? payload.reasonCode ?? '')
+      .toString()
+      .trim()
+  if (reason === '선택' || reason === '선택하세요') reason = ''
+
+  return {
+    reason: sanitizeText(reason) || null,
+    detail: sanitizeText((payload.detail ?? '').toString().trim()) || null,
+    ...(payload.reporterType ? { reporterType: sanitizeText(payload.reporterType) } : {})
+  }
+}
+
+/**
+ * [NEW] reportReviewV2()
+ * - 문자열 또는 객체 payload 모두 지원
+ * - XSS sanitize 적용
+ * - 예)
+ *   reportReviewV2(id, 'SPAM')
+ *   reportReviewV2(id, { reasonCode: 'OTHER', detail: '욕설 포함' })
+ */
+export async function reportReviewV2(reviewId, payload) {
+  const body = _normalizeReportPayloadFlexible(payload)
+  return post(`/reviews/${reviewId}/report`, body)
+}
+
+/** [별칭] 동일 기능 */
+export const reportReviewObject = reportReviewV2

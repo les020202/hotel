@@ -26,6 +26,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import static org.springframework.security.config.Customizer.withDefaults;
 
 import java.util.HashMap;
 import java.util.List;
@@ -69,116 +70,114 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository clientRegistrationRepository) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // 세션 필요 시에만 생성 (OAuth2 플로우 위해)
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
-                .authorizeHttpRequests(auth -> auth
-                        // ------------ 공개 리소스 ------------
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(
-                                "/", "/index.html", "/favicon.ico", "/assets/**",
-                                "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health",
-                                "/error", "/error/**",
-                                "/files/**",     // 기존 정적 매핑
-                                "/uploads/**"    // ★ 추가: 업로드 정적 매핑
-                        ).permitAll()
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
 
-                        // ------------ 인증/로그인 관련 ------------
-                        .requestMatchers("/oauth2/**", "/login/oauth2/**", "/api/auth/**").permitAll()
+            // 🔐 보안 헤더(버전 호환)
+            .headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp
+                    .policyDirectives("default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"))
+                // .xssProtection(x -> x.block(true))  // ⛔ Spring Security 6+에서는 제거/미지원일 수 있어 생략
+                .frameOptions(frame -> frame.sameOrigin())
+                .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true))
+                .contentTypeOptions(withDefaults()) // → X-Content-Type-Options: nosniff
+            )
 
+            .authorizeHttpRequests(auth -> auth
+                // 공개 리소스
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(
+                    "/", "/index.html", "/favicon.ico", "/assets/**",
+                    "/swagger-ui/**", "/v3/api-docs/**", "/actuator/health",
+                    "/error", "/error/**",
+                    "/files/**",
+                    "/uploads/**"
+                ).permitAll()
 
+                // 인증/로그인 관련
+                .requestMatchers("/oauth2/**", "/login/oauth2/**", "/api/auth/**").permitAll()
 
-                        // ── 결제: 브리지(리디렉션 처리용)가 있다면 허용, 실제 승인은 로그인 필요
-                        .requestMatchers(HttpMethod.GET,  "/api/payments/success-bridge").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/payments/confirm").authenticated()   // ✅ 비회원 결제 차단
+                // 결제
+                .requestMatchers(HttpMethod.GET,  "/api/payments/success-bridge").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments/confirm").authenticated()
 
-                        // ------------ 공개 호텔 검색/조회 ------------
-                        .requestMatchers(HttpMethod.GET, "/api/hotels/**", "/api/search/**").permitAll()
-                        .requestMatchers("/api/amenities/**").permitAll()
-                        .requestMatchers("/reservation/**").permitAll()
-                        .requestMatchers("/api/time").permitAll()
+                // 공개 호텔 검색/조회
+                .requestMatchers(HttpMethod.GET, "/api/hotels/**", "/api/search/**").permitAll()
+                .requestMatchers("/api/amenities/**").permitAll()
+                .requestMatchers("/reservation/**").permitAll()
+                .requestMatchers("/api/time").permitAll()
 
-
-
-
+                // (기존 유지)
                 .requestMatchers("/api/hotelapp/**").authenticated()
 
+                // ✅ 리뷰 공개 조회(비로그인 허용) — 경로 보정
+                .requestMatchers(HttpMethod.GET, "/api/hotels/*/reviews").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/hotels/*/reviews/rating").permitAll() // ← 여기!!
 
-              
+                // 리뷰 작성/업로드/신고
+                .requestMatchers(HttpMethod.POST, "/api/reviews").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/reviews/*/photo").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/reviews/*/report").authenticated()
 
-                        // ------------ 리뷰 공개 조회(비로그인 OK) ------------
-                        .requestMatchers(HttpMethod.GET, "/api/hotels/*/reviews").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/hotels/*/rating").permitAll()
+                // 예약 hold
+                .requestMatchers(HttpMethod.POST,   "/api/reservations/holds/**").authenticated()
+                .requestMatchers(HttpMethod.GET,    "/api/reservations/holds/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/reservations/holds/**").authenticated()
 
-                        // ------------ 리뷰 작성/업로드/신고(로그인 필요) ------------
-                        .requestMatchers(HttpMethod.POST, "/api/reviews").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/reviews/*/photo").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/reviews/*/report").authenticated()
+                // 역할별
+                .requestMatchers("/api/owner/**").hasRole("OWNER")
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/reviews/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/hotel-applications/**", "/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN")
 
-                        // ── 예약 hold: 생성/조회/삭제 모두 로그인 필요
-                        .requestMatchers(HttpMethod.POST,   "/api/reservations/holds/**").authenticated() // ✅
-                        .requestMatchers(HttpMethod.GET,    "/api/reservations/holds/**").authenticated() // ✅
-                        .requestMatchers(HttpMethod.DELETE, "/api/reservations/holds/**").authenticated() // ✅
+                // 그 외
+                .requestMatchers("/api/coupons/**").authenticated()
+                .anyRequest().authenticated()
+            )
 
-                        // ------------ 역할별 보호 구간 ------------
-                        // ── 오너/관리자 백오피스
-                        .requestMatchers("/api/owner/**").hasRole("OWNER")
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/reviews/**").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/hotel-applications/**", "/api/admin/**").hasRole("ADMIN")
-                        // (운영 배치용 엔드포인트는 역할 제한)
+            .formLogin(form -> form.disable())
+            .httpBasic(basic -> basic.disable())
 
-                        .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN")
+            .exceptionHandling(e -> e.authenticationEntryPoint(
+                (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)
+            ))
 
-                        // ------------ 그 외 ------------
-                        .requestMatchers("/api/coupons/**").authenticated()
-                        .anyRequest().authenticated()
-
+            .oauth2Login(oauth -> oauth
+                .authorizationEndpoint(ep -> ep
+                    .baseUri("/oauth2/authorization")
+                    .authorizationRequestRepository(new org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository())
+                    .authorizationRequestResolver(customAuthorizationRequestResolver(clientRegistrationRepository))
                 )
-                .formLogin(form -> form.disable())
-                .httpBasic(basic -> basic.disable())
-                .exceptionHandling(e -> e.authenticationEntryPoint(
-                        (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)
-                ))
-                .oauth2Login(oauth -> oauth
-                        .authorizationEndpoint(ep -> ep
-                                .baseUri("/oauth2/authorization")
-                                .authorizationRequestRepository(new org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository())
-                                .authorizationRequestResolver(customAuthorizationRequestResolver(clientRegistrationRepository))
-                        )
-                        .redirectionEndpoint(re -> re.baseUri("/login/oauth2/code/*"))
-                        .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
-                        .successHandler(oAuth2SuccessHandler)
-                        .failureHandler((req, res, ex) -> {
-                            String origin = req.getHeader("Origin");
-                            if (origin == null || origin.isBlank()) origin = "http://localhost:5173";
-                            String target = origin + "/login?social_error=" +
-                                    java.net.URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
-                                            java.nio.charset.StandardCharsets.UTF_8);
-                            res.setStatus(302);
-                            res.sendRedirect(target);
-                        })
-                )
-                .logout(l -> l
-                        .logoutUrl("/logout")
-                        .deleteCookies("JSESSIONID", "refreshToken")
-                        .invalidateHttpSession(true)
-                        .clearAuthentication(true)
-                        .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
-                )
-                .authenticationProvider(authProvider())
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .redirectionEndpoint(re -> re.baseUri("/login/oauth2/code/*"))
+                .userInfoEndpoint(ui -> ui.userService(oAuth2UserService))
+                .successHandler(oAuth2SuccessHandler)
+                .failureHandler((req, res, ex) -> {
+                    String origin = req.getHeader("Origin");
+                    if (origin == null || origin.isBlank()) origin = "http://localhost:5173";
+                    String target = origin + "/login?social_error=" +
+                            java.net.URLEncoder.encode(ex.getMessage() != null ? ex.getMessage() : "OAuth2_failed",
+                                    java.nio.charset.StandardCharsets.UTF_8);
+                    res.setStatus(302);
+                    res.sendRedirect(target);
+                })
+            )
 
+            .logout(l -> l
+                .logoutUrl("/logout")
+                .deleteCookies("JSESSIONID", "refreshToken")
+                .invalidateHttpSession(true)
+                .clearAuthentication(true)
+                .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
+            )
 
-
+            .authenticationProvider(authProvider())
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    /**
-     * 제공자별 계정선택/재로그인 강제 파라미터 삽입
-     */
     @Bean
     public OAuth2AuthorizationRequestResolver customAuthorizationRequestResolver(
             ClientRegistrationRepository repo) {

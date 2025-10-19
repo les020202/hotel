@@ -7,7 +7,6 @@
         <button class="text-gray-500 hover:text-black" @click="$emit('close')" aria-label="닫기">✕</button>
       </header>
 
-      <!-- form으로 감싸고 기본 submit 막기 -->
       <form @submit.prevent="onSubmit" class="space-y-3">
         <div>
           <label class="block text-sm text-gray-600">사유</label>
@@ -47,10 +46,11 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { sanitizeText } from '@/utils/sanitize'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  submitting: { type: Boolean, default: false } // 부모에서 전송중 상태 내려줄 수 있게(옵션)
+  submitting: { type: Boolean, default: false }
 })
 const emit = defineEmits(['close', 'submit'])
 
@@ -66,13 +66,11 @@ const canSubmit = computed(() =>
 )
 
 function onSubmit() {
-  // payload 키를 reasonCode로 명확히 전달 (reportReview에서 정상 처리됨)
-  emit('submit', {
-    reasonCode: code.value,
-    detail: code.value === 'OTHER' ? (detail.value || '') : ''
-  })
-  // 성공/실패 처리에 따라 닫는 타이밍은 부모가 결정하는게 안전하지만,
-  // 기존 동작 유지가 필요하면 아래 한 줄 유지/제거를 선택하면 됨.
+  const payload = {
+    reasonCode: sanitizeText(code.value || ''),
+    detail: code.value === 'OTHER' ? sanitizeText(detail.value || '') : ''
+  }
+  emit('submit', payload)
   emit('close')
 }
 

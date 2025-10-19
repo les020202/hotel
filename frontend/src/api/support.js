@@ -1,4 +1,6 @@
 import api from '@/api/auth' // ✅ 공용 Axios 인스턴스(토큰/리프레시/withCredentials 설정 포함)
+// 🔹 추가: 전송 전 보조 정화를 위한 유틸
+import { sanitizeAndClamp } from '@/utils/sanitize'
 
 /**
  * [고객지원(티켓) API 유틸]
@@ -14,6 +16,10 @@ import api from '@/api/auth' // ✅ 공용 Axios 인스턴스(토큰/리프레�
  *    메시지추가:POST  /support/tickets/{id}/messages
  *    티켓생성: POST   /support/tickets
  */
+
+// 🔹 추가: 프론트 보조 방어용 길이 기준 (백엔드와 동일 추천)
+export const SUBJECT_MAX = 150
+export const BODY_MAX = 8000
 
 /**
  * 내 티켓 목록 조회
@@ -69,8 +75,11 @@ export function getTicketMessages(id) {
  *   // 파일 업로드가 필요하면 FormData 기반의 별도 API를 추가하세요.
  */
 export function postTicketMessage(id, content) {
+  // ✅ 전송 직전 클라이언트 보조 정화 + 길이 제한
+  const safe = sanitizeAndClamp(content, BODY_MAX)
+  if (!safe) return Promise.reject(new Error('내용을 입력해주세요.'))
   // POST /support/tickets/{id}/messages  { content }
-  return api.post(`/support/tickets/${id}/messages`, { content })
+  return api.post(`/support/tickets/${id}/messages`, { content: safe })
 }
 
 /**
@@ -84,6 +93,12 @@ export function postTicketMessage(id, content) {
  *   // 카테고리/우선순위/첨부 등은 향후 payload 확장으로 대응
  */
 export function openTicket({ subject, firstMessage }) {
+  // ✅ 전송 직전 클라이언트 보조 정화 + 길이 제한
+  const safeSubject = sanitizeAndClamp(subject, SUBJECT_MAX)
+  const safeMessage = sanitizeAndClamp(firstMessage, BODY_MAX)
+  if (!safeSubject) return Promise.reject(new Error('제목을 입력해주세요.'))
+  if (!safeMessage) return Promise.reject(new Error('내용을 입력해주세요.'))
+
   // POST /support/tickets  { subject, firstMessage }
-  return api.post('/support/tickets', { subject, firstMessage })
+  return api.post('/support/tickets', { subject: safeSubject, firstMessage: safeMessage })
 }

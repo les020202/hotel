@@ -13,17 +13,29 @@
       <!-- 제목 입력 -->
       <label>
         <span class="label">제목</span>
-        <input v-model="subject" required placeholder="문의 제목을 입력하세요" />
+        <input
+          v-model="subject"
+          required
+          placeholder="문의 제목을 입력하세요"
+          :maxlength="SUBJECT_MAX"
+        />
       </label>
 
       <!-- 내용 입력 -->
       <label>
         <span class="label">내용</span>
-        <textarea v-model="message" required placeholder="문의하실 내용을 입력하세요"></textarea>
+        <textarea
+          v-model="message"
+          required
+          placeholder="문의하실 내용을 입력하세요"
+          :maxlength="BODY_MAX"
+        ></textarea>
       </label>
 
       <!-- 제출 버튼 -->
-      <button type="submit" class="btn">문의 등록</button>
+      <button type="submit" class="btn" :disabled="submitting">
+        {{ submitting ? '등록 중…' : '문의 등록' }}
+      </button>
     </form>
   </div>
 </template>
@@ -31,19 +43,23 @@
 <script setup>
 /**
  * SupportInquiry.vue
- * - 사용자가 고객센터에 이메일 문의를 등록하는 화면
- * - 제목과 내용을 입력 받아 백엔드(/support/tickets)로 전송
- * - 등록 후 알림 → 고객지원 목록(/mypage/support)으로 이동
+ * - 제목/내용 입력 → 백엔드(/support/tickets)로 전송
+ * - 전송 직전 sanitize + trim + 길이 제한(제목 150, 내용 8000)
+ * - 디자인/기능 흐름은 그대로 유지
  */
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/auth'  // axios 인스턴스 (공통 API)
+import { sanitizeText, clamp } from '@/utils/sanitize'
 
 const router = useRouter()
+const SUBJECT_MAX = 150
+const BODY_MAX = 8000
 
 // 입력 데이터 (양방향 바인딩)
 const subject = ref('')  // 문의 제목
 const message = ref('')  // 문의 내용
+const submitting = ref(false)
 
 /** 이전 화면으로 돌아가기 */
 function goBack() {
@@ -52,11 +68,27 @@ function goBack() {
 
 /** 문의 등록 요청 */
 async function submitInquiry() {
+  if (submitting.value) return
+  submitting.value = true
   try {
-    // 백엔드에 문의 티켓 생성 요청
+    // ✅ 전송 직전 클라이언트 측 정화(보조 방어)
+    const cleanSubject = clamp(sanitizeText(subject.value), SUBJECT_MAX)
+    const cleanMessage = clamp(sanitizeText(message.value), BODY_MAX)
+
+    if (!cleanSubject) {
+      alert('제목을 입력해주세요.')
+      submitting.value = false
+      return
+    }
+    if (!cleanMessage) {
+      alert('내용을 입력해주세요.')
+      submitting.value = false
+      return
+    }
+
     await api.post('/support/tickets', {
-      subject: subject.value,
-      firstMessage: message.value
+      subject: cleanSubject,
+      firstMessage: cleanMessage
     })
     alert('문의가 등록되었습니다!')
 
@@ -69,6 +101,8 @@ async function submitInquiry() {
   } catch (e) {
     console.error('문의 등록 실패', e)
     alert('문의 등록에 실패했습니다.')
+  } finally {
+    submitting.value = false
   }
 }
 </script>

@@ -92,12 +92,18 @@
 			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 
-
 		<!-- (선택) Lombok - 보일러플레이트 줄이고 싶으면 -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
+		</dependency>
+		
+		<!-- XSS sanitize용 -->
+		<dependency>
+		  <groupId>org.jsoup</groupId>
+		  <artifactId>jsoup</artifactId>
+		  <version>1.17.2</version>
 		</dependency>
 
 	</dependencies>

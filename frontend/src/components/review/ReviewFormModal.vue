@@ -7,7 +7,6 @@
         <button class="text-gray-500 hover:text-black" @click="$emit('close')">✕</button>
       </div>
 
-      <!-- 작성 불가 안내 -->
       <div
         v-if="!validBookingId"
         class="mb-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 text-sm"
@@ -43,7 +42,7 @@
         <!-- 사진 1장 -->
         <div class="mb-4">
           <label class="block text-sm text-gray-600 mb-1">사진 (최대 1장)</label>
-          <input ref="fileEl" type="file" accept="image/*" @change="onPick" />
+          <input ref="fileEl" type="file" accept=".jpg,.jpeg,.png,.webp,.gif" @change="onPick" />
           <p v-if="fileName" class="text-xs text-gray-500 mt-1">선택: {{ fileName }}</p>
         </div>
 
@@ -67,11 +66,11 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { createReview } from '@/api/reviews'
+import { sanitizeText, validateFiles } from '@/utils/sanitize'
 
 const props = defineProps({
   open:     { type: Boolean, default: false },
   hotelId:  { type: Number,  required: true },
-  // ✅ 선택적: eligibility 로부터 전달되지만 초기엔 undefined일 수 있음
   bookingId:{ type: [Number, String, null], default: null },
 })
 const emit = defineEmits(['close', 'submitted'])
@@ -83,14 +82,12 @@ const fileName   = ref('')
 const submitting = ref(false)
 const fileEl     = ref(null)
 
-// bookingId 유효성 (숫자로 해석 가능해야 함)
 const normalizedBookingId = computed(() => {
   const n = Number(props.bookingId)
   return Number.isFinite(n) ? n : null
 })
 const validBookingId = computed(() => normalizedBookingId.value !== null)
 
-// 버튼 활성/비활성
 const canSubmit  = computed(() => rating.value >= 1 && !submitting.value && validBookingId.value)
 const submitHint = computed(() => {
   if (!validBookingId.value) return '작성 가능한 예약이 없습니다.'
@@ -101,10 +98,11 @@ const submitHint = computed(() => {
 watch(() => props.open, (v) => { if (v) reset() })
 
 function onPick(e) {
-  const f = e.target.files?.[0] || null
+  const { ok, errors } = validateFiles(e.target.files)
+  if (errors.length) alert(errors.join('\n'))
+  const f = ok[0] || null
   file.value = f
   fileName.value = f?.name || ''
-  // 같은 파일을 다시 선택해도 change가 동작하도록 초기화
   if (fileEl.value) fileEl.value.value = ''
 }
 
@@ -121,9 +119,9 @@ async function submit() {
   submitting.value = true
   try {
     await createReview(props.hotelId, {
-      bookingId: normalizedBookingId.value,   // ✅ 숫자 보장
+      bookingId: normalizedBookingId.value,
       rating:    rating.value,
-      comment:   comment.value || null,
+      comment:   sanitizeText(comment.value || ''),
       photo:     file.value || null,
     })
     emit('submitted')

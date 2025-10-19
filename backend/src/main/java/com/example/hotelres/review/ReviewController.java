@@ -5,7 +5,10 @@ import com.example.hotelres.review.dto.ReviewDtos.EligibilityResponse;
 import com.example.hotelres.review.dto.ReviewDtos.ListResponse;
 import com.example.hotelres.review.dto.ReviewDtos.RatingResponse;
 import com.example.hotelres.review.dto.ReviewDtos.ReportRequest; // ✅ 이 DTO를 사용
+
 import lombok.RequiredArgsConstructor;
+import org.jsoup.Jsoup;                       // [NEW]
+import org.jsoup.safety.Safelist;           // [NEW]
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -57,10 +60,17 @@ public class ReviewController {
                                                                         @RequestParam(value = "comment", required = false) String comment,
                                                                         @RequestParam(value = "photo", required = false) MultipartFile photo,
                                                                         @org.springframework.security.core.annotation.AuthenticationPrincipal(expression = "username") String loginId) {
-
         Long userId = userRepository.findIdByLoginId(loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
-        return reviewService.create(hotelId, bookingId, userId, rating, comment, photo);
+
+        // [NEW] XSS 방어: 서버 측 sanitize (허용 태그 제한)
+        // 제목 필드가 없고 comment만 받는 구조로 보이므로 comment만 정리
+        String cleanedComment = comment == null
+                ? null
+                : Jsoup.clean(comment, Safelist.basic()); // 필요시 허용태그 커스터마이즈
+
+        // [NOTE] 사진 파일 검사는 ReviewFileStorageService에서 수행(확장자/매직바이트/크기)
+        return reviewService.create(hotelId, bookingId, userId, rating, cleanedComment, photo);
     }
 
     /** 리뷰 신고 (USER/OWNER 구분은 서비스 인자 isOwner=false로 처리) */
@@ -74,8 +84,13 @@ public class ReviewController {
         Long userId = userRepository.findIdByLoginId(loginId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
 
-        String reason = (req == null) ? null : req.getReason();
-        String detail = (req == null) ? null : req.getDetail();
+        // [NEW] 신고 사유/상세도 sanitize
+        String reason = (req == null || req.getReason() == null)
+                ? null
+                : Jsoup.clean(req.getReason(), Safelist.none()); // 텍스트만
+        String detail = (req == null || req.getDetail() == null)
+                ? null
+                : Jsoup.clean(req.getDetail(), Safelist.basic()); // 필요시 태그 제한
 
         reviewService.report(id, userId, reason, detail, false);
     }
@@ -102,7 +117,7 @@ public class ReviewController {
         reviewService.deleteMine(id, userId);
     }
 
-    /** (호환용) 기존 경로 유지하고 싶으면 남겨둠 */
+    /** (호환용) 기존 경로 유지 */
     @DeleteMapping("/reviews/{id}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -112,8 +127,4 @@ public class ReviewController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "사용자 ID를 찾을 수 없습니다."));
         reviewService.deleteMine(id, userId);
     }
-
-    // ⛔️ 아래 내부 ReportRequest 클래스는 삭제하세요 (DTO 중복)
-    // @Getter @Setter ...
-    // public static class ReportRequest { ... }
 }

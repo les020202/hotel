@@ -75,7 +75,7 @@
           <small class="text-gray-500 shrink-0">{{ dt(r.createdAt) }}</small>
         </div>
 
-        <!-- 본문: 사진이 있을 때만 2열 -->
+        <!-- 본문 -->
         <div class="mt-3" :class="firstPhoto(r) ? 'grid grid-cols-[120px,1fr] gap-4 items-start' : ''">
           <!-- 썸네일(있을 때만) -->
           <button
@@ -87,7 +87,7 @@
             <img :src="firstPhoto(r)" alt="review-photo" class="w-full h-full object-cover" loading="lazy" />
           </button>
 
-          <!-- 텍스트 + 액션 -->
+          <!-- 텍스트 + 액션 (v-html 없음) -->
           <div class="min-w-0">
             <p class="whitespace-pre-wrap leading-7 text-[15px]">
               {{ r.comment || '' }}
@@ -119,7 +119,7 @@
       <p v-if="loading" class="text-gray-400">불러오는 중…</p>
     </div>
 
-    <!-- 목록 아래 '리뷰 더보기' -->
+    <!-- 더보기 -->
     <div v-if="hasMore" class="mt-6">
       <button
         class="w-full py-2 text-sm rounded-lg border hover:bg-gray-50 active:bg-gray-100 transition"
@@ -138,7 +138,7 @@
       @submitted="reloadAll"
     />
 
-    <!-- 전체 리뷰 모달(무한스크롤) -->
+    <!-- 전체 리뷰 모달 -->
     <ReviewListModal
       :open="openAll"
       :hotel-id="hotelId"
@@ -156,7 +156,7 @@
       <img :src="lightboxUrl" alt="photo" class="max-h-[85vh] max-w-[92vw] rounded-2xl shadow-2xl object-contain" />
     </div>
 
-    <!-- 신고 모달(드롭다운 + 기타입력) -->
+    <!-- 신고 모달 -->
     <ReportDialog
       :open="reportOpen"
       @close="reportOpen = false"
@@ -178,7 +178,7 @@ import {
 import { getMe } from '@/api/auth'
 import ReviewFormModal from './ReviewFormModal.vue'
 import ReviewListModal from './ReviewListModal.vue'
-import ReportDialog from './ReportDialog.vue'   // ★ 신고 드롭다운 모달
+import ReportDialog from './ReportDialog.vue'
 
 const props = defineProps({
   hotelId: { type: Number, required: true }
@@ -256,19 +256,20 @@ async function onDelete(id) {
   }
 }
 
-// 신고: 드롭다운 모달 사용
+// 신고
 const reportOpen = ref(false)
 const reportTargetId = ref(null)
 function openReport(id) {
   reportTargetId.value = id
   reportOpen.value = true
 }
-async function submitReport({ reason }) {
+async function submitReport({ reason, reasonCode, detail }) {
   if (!reportTargetId.value) return
   try {
-    await reportReview(reportTargetId.value, reason)
+    const payload = reasonCode ? { reasonCode, detail: detail || '' } : { reason: reason || '' }
+    await reportReview(reportTargetId.value, payload)
     alert('신고가 접수되었습니다.')
-    reportOpen.value = false   // 안전 닫기 (중복 닫힘 무해)
+    reportOpen.value = false
   } catch (err) {
     let msg = '신고에 실패했습니다.'
     try { const j = JSON.parse(err?.message || '{}'); if (j?.error) msg = j.error } catch {}
