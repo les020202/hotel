@@ -50,6 +50,8 @@ import BugReport from '@/views/support/BugReport.vue'
 // 찜
 import Wishlist from '@/views/Wishlist.vue'
 
+import ErrorView from '@/views/error/ErrorView.vue'
+
 // (선택) 403 페이지
 const Forbidden = { template: '<div style="padding:2rem">권한이 없습니다 (403)</div>' }
 
@@ -271,8 +273,15 @@ const router = createRouter({
     // 찜
     { path: '/wishlist', name: 'Wishlist', component: Wishlist, meta: { requiresAuth: true } },
 
-    { path: '/403', component: Forbidden },
-    { path: '/:pathMatch(.*)*', redirect: '/main' }
+
+    { path: '/:pathMatch(.*)*', redirect: '/main' },
+    
+    { path: '/403', redirect: { name: 'Error', params: { status: 403 } } },
+        // 필요 시 명시적 에러 경로
+    { path: '/error/:status(\\d+)?', name: 'Error', component: ErrorView, props: true },
+
+    // 404: 맨 마지막 catch-all
+    { path: '/:pathMatch(.*)*', name: 'NotFound', component: ErrorView, props: { status: 404 } }
   ]
 })
 
@@ -338,7 +347,7 @@ router.beforeEach((to, from, next) => {
   if (to.matched.some(r => r.meta && r.meta.requiresOwner)) {
     const claims = parseJwt(token)
     if (!hasOwnerRole(claims)) {
-      return next('/main')
+      return next('/403')
     }
   }
 
@@ -378,4 +387,5 @@ export async function api(path, opts = {}) {
   return res
 }
 
+export { router }
 export default router
