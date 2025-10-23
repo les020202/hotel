@@ -106,6 +106,12 @@
 		  <version>1.17.2</version>
 		</dependency>
 
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j_jdk17-core</artifactId>
+			<version>8.13.0</version> <!-- 최신 안정(예: 8.13.0) -->
+		</dependency>
+
 	</dependencies>
 
 	<build>

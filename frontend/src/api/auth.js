@@ -136,6 +136,20 @@ api.interceptors.response.use(
   async (error) => {
     const original = error?.config
     const status = error?.response?.status
+
+    if (status === 429) {
+      const until = Date.now() + 20_000; // 30초 차단 (원하면 조정)
+      sessionStorage.setItem('tooManyUntil', String(until))
+
+       if (!sessionStorage.getItem('tooManyBack')) {
+    sessionStorage.setItem('tooManyBack', router.currentRoute.value.fullPath)
+  }
+      // 현재가 이미 429 페이지가 아니면 이동
+      if (router.currentRoute.value.name !== 'TooMany') {
+        router.replace({ name: 'TooMany' })
+      }
+      return Promise.reject(error)
+    }
     if (!original || original._retry) return Promise.reject(error)
 
     // ✅ 두 번째 파일 정책 반영: /auth/ 경로는 refresh 시도하지 않음

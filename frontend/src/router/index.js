@@ -1,6 +1,8 @@
 // frontend/src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 
+
+
 // 기본/인증
 import SignupView from '@/views/SignupView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -50,6 +52,9 @@ import Wishlist from '@/views/Wishlist.vue'
 
 // (선택) 403 페이지
 const Forbidden = { template: '<div style="padding:2rem">권한이 없습니다 (403)</div>' }
+
+
+const TooMany = () => import('@/views/system/TooManyRequests.vue')
 
 // === 오너 뷰 ===
 import OwnerLayout from '@/views/owner/OwnerLayout.vue'
@@ -114,6 +119,7 @@ const router = createRouter({
     { path: '/signup', component: SignupView, meta: { public: true } },
     { path: '/find-password', component: FindPasswordView, meta: { public: true } },
     { path: '/search', name: 'search', component: SearchView, meta: { public: true } },
+    { path: '/too-many-requests', name: 'TooMany', component: TooMany, meta: { public: true } },
     {
       path: '/hotels/:id',
       name: 'hotel-detail',
@@ -270,8 +276,20 @@ const router = createRouter({
   ]
 })
 
+
+
 // 전역 가드: 소셜 로그인 리다이렉트 + 인증/역할 체크 + 날짜 정규화
 router.beforeEach((to, from, next) => {
+
+  // ★ 429 TTL 가드 — sessionStorage에 유효시간이 남아 있으면 곧바로 전용 페이지로
+  const until = Number(sessionStorage.getItem('tooManyUntil') || 0)
+  if (Date.now() < until && to.name !== 'TooMany') {
+      if (!sessionStorage.getItem('tooManyBack')) {
+    sessionStorage.setItem('tooManyBack', to.fullPath)
+  }
+
+    return next({ name: 'TooMany' })
+  }
   // 토큰을 해시/쿼리에서 회수 (소셜 리다이렉트 케이스)
   const hash = to.hash || window.location.hash
   const m = hash && hash.match(/token=([^&]+)/)

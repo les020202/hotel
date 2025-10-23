@@ -81,7 +81,6 @@ const showPanel = computed(() => props.open);
           <h4>대한민국 내 여행지</h4>
           <ul class="grid">
             <li v-for="name in filteredRegions" :key="name" @click.stop="choose(name)">
-              <div class="thumb"></div>
               <div class="txt"><b>{{ name }}</b></div>
             </li>
             <li v-if="filteredRegions.length===0" class="empty">검색 결과가 없습니다</li>
