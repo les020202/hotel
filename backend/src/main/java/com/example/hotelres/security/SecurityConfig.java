@@ -140,10 +140,14 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/reviews/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/hotel-applications/**", "/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/reservations/holds/release-expired").hasRole("ADMIN")
+                
+                //에러 메시지 테스트용
+                .requestMatchers("/api/test/**").permitAll()
 
                 // 그 외
                 .requestMatchers("/api/coupons/**").authenticated()
                 .anyRequest().authenticated()
+                
             )
 
             .formLogin(form -> form.disable())
